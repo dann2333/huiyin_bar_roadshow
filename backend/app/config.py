@@ -14,6 +14,18 @@ class ZhihuConfig:
     APP_SECRET: str = os.getenv("ZHIHU_APP_SECRET", "")
     BASE_URL: str = "https://openapi.zhihu.com"
 
+    @staticmethod
+    def get_share_image_url() -> str:
+        """
+        运行时读取分享图片 URL
+        NOTE: 每次调用都重新加载 .env，确保修改后无需重启
+        """
+        load_dotenv(
+            dotenv_path=os.path.join(os.path.dirname(__file__), '..', '..', '.env'),
+            override=True,
+        )
+        return os.getenv("ZHIHU_SHARE_IMAGE_URL", "")
+
 
 class SecondMeConfig:
     """SecondMe OAuth2 + API 配置"""

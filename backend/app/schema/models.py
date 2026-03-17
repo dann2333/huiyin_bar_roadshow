@@ -118,6 +118,9 @@ class AutoModeRequest(BaseModel):
 class PublishRequest(BaseModel):
     """发布到知乎圈子请求"""
     session_id: str
-    ring_id: str = "2001009660925334090"
+    ring_id: str = "2015023739549529606"
     title: str = ""
     content: str = ""
+    receipt: str = ""  # 箴言原文，由前端生成箴言后直接传入
+    concern: str = ""  # 用户困惑，用于格式化分享内容
+    guest_name: str = ""  # 客人真实用户名，用于匿名化处理

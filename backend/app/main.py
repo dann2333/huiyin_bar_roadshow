@@ -2,9 +2,11 @@
 回音酒馆 FastAPI 主入口
 """
 import logging
+import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.auth import router as auth_router
 from app.api.tavern import router as tavern_router
@@ -31,6 +33,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# NOTE: 挂载静态文件，让知乎 API 能下载分享图片
+_static_dir = os.path.join(
+    os.path.dirname(__file__), "..", "..", "frontend", "public", "images"
+)
+if os.path.isdir(_static_dir):
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
 # 注册路由
 app.include_router(auth_router)
 app.include_router(tavern_router)
@@ -45,3 +54,4 @@ async def root():
         "status": "running",
         "version": "0.1.0",
     }
+

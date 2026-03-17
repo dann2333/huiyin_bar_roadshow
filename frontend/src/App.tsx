@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSSEStream } from './hooks/useSSEStream';
+import { useBackgroundMusic } from './hooks/use-background-music';
 import type { TavernEvent, DialogEntry, TavernState } from './types';
 import './index.css';
 
@@ -94,6 +95,12 @@ function App() {
   const [input, setInput] = useState('');
   const [started, setStarted] = useState(false);
   const [authStatus, setAuthStatus] = useState<'checking' | 'success' | 'none'>('checking');
+  // NOTE: 箴言分享相关状态
+  const [receiptText, setReceiptText] = useState('');
+  const [userConcern, setUserConcern] = useState('');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'success' | 'error'>('idle');
+  const [shareUrl, setShareUrl] = useState('');
+  const [guestName, setGuestName] = useState('');
   // NOTE: AI 引擎状态
   const [engine, setEngine] = useState<'qwen' | 'secondme'>('qwen');
   const [engineSwitching, setEngineSwitching] = useState(false);
@@ -102,6 +109,9 @@ function App() {
   const [docContent, setDocContent] = useState('');
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
+  // NOTE: 背景音乐控制
+  const { isPlaying, volume, togglePlay, setVolume } = useBackgroundMusic('/audio/酒馆小曲.mp3');
+  const [musicPanelOpen, setMusicPanelOpen] = useState(true);
   // NOTE: 使用 ref 确保回调中始终能拿到最新的 sessionKey
   const sessionKeyRef = useRef(getStoredSessionKey());
 
@@ -238,6 +248,7 @@ function App() {
     const concern = input.trim();
     setInput('');
     setStarted(true);
+    setUserConcern(concern);
 
     setState(prev => ({
       ...prev,
@@ -355,6 +366,14 @@ function App() {
         },
       );
       const data = await resp.json();
+      const receipt = data.receipt || '';
+      // NOTE: 保存箴言原文和用户困惑，供后续分享使用
+      setReceiptText(receipt);
+      if (data.concern) setUserConcern(data.concern);
+      if (data.guest_name) setGuestName(data.guest_name);
+      // 重置分享状态
+      setShareStatus('idle');
+      setShareUrl('');
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -362,7 +381,7 @@ function App() {
           id: `receipt-${Date.now()}`,
           type: 'stage',
           speaker: '',
-          content: `📜 今夜酒馆箴言\n\n${data.receipt || ''}`,
+          content: `📜 今夜酒馆箴言\n\n${receipt}`,
           timestamp: Date.now(),
         }],
       }));
@@ -371,6 +390,35 @@ function App() {
       setState(prev => ({ ...prev, isLoading: false }));
     }
   }, [state.sessionId]);
+
+  /** 分享箴言到知乎圈子 */
+  const handleShareToZhihu = useCallback(async () => {
+    if (!receiptText || shareStatus === 'sharing') return;
+    setShareStatus('sharing');
+    try {
+      const resp = await fetch(`${API_BASE}/api/social/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: state.sessionId,
+          receipt: receiptText,
+          concern: userConcern,
+          guest_name: guestName,
+        }),
+      });
+      const data = await resp.json();
+      if (resp.ok && data.url) {
+        setShareStatus('success');
+        setShareUrl(data.url);
+      } else {
+        console.error('分享失败:', data.error);
+        setShareStatus('error');
+      }
+    } catch (err) {
+      console.error('分享异常:', err);
+      setShareStatus('error');
+    }
+  }, [receiptText, userConcern, state.sessionId, shareStatus]);
 
   /** 发起 OAuth 登录 */
   const handleLogin = () => {
@@ -407,6 +455,39 @@ function App() {
 
   return (
     <div className="tavern">
+      {/* 右下角音乐控制按钮 */}
+      <div className={`music-control ${musicPanelOpen ? 'open' : ''}`}>
+        <button
+          className={`music-toggle ${isPlaying ? 'playing' : ''}`}
+          onClick={togglePlay}
+          title={isPlaying ? '暂停音乐' : '播放音乐'}
+        >
+          {isPlaying ? '🎵' : '🔇'}
+        </button>
+        <button
+          className="music-expand"
+          onClick={() => setMusicPanelOpen(prev => !prev)}
+          title="音量设置"
+        >
+          {musicPanelOpen ? '▾' : '▴'}
+        </button>
+        {musicPanelOpen && (
+          <div className="music-panel">
+            <div className="music-panel-label">音量</div>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={volume}
+              onChange={e => setVolume(parseFloat(e.target.value))}
+              className="music-volume-slider"
+            />
+            <div className="music-volume-value">{Math.round(volume * 100)}%</div>
+          </div>
+        )}
+      </div>
+
       {/* 左上角项目文档按钮 */}
       <button
         className="doc-trigger"
@@ -564,7 +645,13 @@ function App() {
                     {entry.type === 'guest_past' && '🔥 '}
                     {entry.type === 'guest_now' && '🌊 '}
                     {entry.type === 'guest_alt' && '🌀 '}
-                    {entry.speaker}
+                    {entry.type === 'guest_past'
+                      ? '刘看山请来的客人（当初）'
+                      : entry.type === 'guest_now'
+                        ? '刘看山请来的客人（如今）'
+                        : entry.type === 'guest_alt'
+                          ? '刘看山请来的客人（平行宇宙）'
+                          : entry.speaker}
                   </div>
                 )}
                 <div
@@ -613,6 +700,28 @@ function App() {
                 <>
                   <button className="action-btn butterfly" onClick={handleButterfly}>🦋 蝴蝶效应</button>
                   <button className="action-btn" onClick={handleReceipt}>📜 生成箴言</button>
+                  {receiptText && (
+                    <button
+                      className={`action-btn share-zhihu ${shareStatus}`}
+                      onClick={handleShareToZhihu}
+                      disabled={shareStatus === 'sharing' || shareStatus === 'success'}
+                    >
+                      {shareStatus === 'idle' && '📤 分享到知乎'}
+                      {shareStatus === 'sharing' && '⏳ 发布中...'}
+                      {shareStatus === 'success' && '✅ 已分享'}
+                      {shareStatus === 'error' && '❌ 重试分享'}
+                    </button>
+                  )}
+                  {shareStatus === 'success' && shareUrl && (
+                    <a
+                      className="share-link"
+                      href={shareUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      🔗 查看知乎圈子
+                    </a>
+                  )}
                 </>
               )}
             </div>

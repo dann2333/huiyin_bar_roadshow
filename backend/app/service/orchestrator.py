@@ -343,12 +343,17 @@ class TavernOrchestrator:
             async for event in self._run_debate_round(session):
                 yield event
 
+            # FIXME: 竞态修复——保存前先从文件同步 auto_mode 标志
+            # 避免内存中的 auto_mode=True 覆盖 stop_auto_mode 写入的 False
+            latest = _load_sessions().get(session_id)
+            if latest:
+                session.auto_mode = latest.auto_mode
+
             # NOTE: 轮次结束后保存对话历史
             self._save_session(session)
 
-            # 轮次结束后再次检查，实现柔性停止
-            latest = _load_sessions().get(session_id)
-            if latest and not latest.auto_mode:
+            # 轮次结束后检查，实现柔性停止
+            if not session.auto_mode:
                 break
 
         # 自动模式结束
@@ -403,14 +408,33 @@ class TavernOrchestrator:
             return {"error": "酒局不存在"}
 
         context = self._build_context(session)
+        # NOTE: 注入当前日期，避免 LLM 编造错误日期
+        from datetime import datetime
+        today = datetime.now().strftime("%Y.%m.%d")
         receipt_prompt = (
-            f"你是酒馆的酒保刘看山。今晚的酒局已经散场。"
-            f"请用温暖而诗意的笔触，总结今晚的对话精华，"
-            f"写成一张「酒馆箴言」小票。\n\n"
-            f"格式要求：\n"
-            f"- 标题：一句话概括今晚的主题\n"
-            f"- 精华语录：提取 3-5 句最打动人的话（标注说话者）\n"
-            f"- 酒保寄语：用刘看山的口吻写一句收尾\n\n"
+            f"你是酒馆的酒保刘看山。今晚的酒局已经散场。\n"
+            f"请严格按照以下模板格式，总结今晚的对话精华。\n\n"
+            f"⚠️ 重要规则：\n"
+            f"1. 不要使用任何真实用户名！说话者一律用：酒馆来客（当年）、酒馆来客（如今）、酒馆来客（平行宇宙）、客人（提问者）\n"
+            f"2. 必须严格遵循下面的模板格式，不要添加多余的装饰符号\n"
+            f"3. 金句提取 3-5 句最打动人的话\n\n"
+            f"===== 输出模板（请严格遵循） =====\n\n"
+            f"🍺 酒馆箴言 🍺\n\n"
+            f"【今夜主题】\n"
+            f"（一句话概括今晚的主题）\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📝 今夜金句\n\n"
+            f"酒馆来客（当年）说：\n"
+            f"\"（引用原话）\"\n\n"
+            f"酒馆来客（如今）说：\n"
+            f"\"（引用原话）\"\n\n"
+            f"（重复 3-5 条金句）\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"【酒保寄语】\n"
+            f"（用刘看山温暖的口吻写 2-3 句收尾寄语）\n\n"
+            f"—— 刘看山 敬上\n\n"
+            f"🌙 {today}\n\n"
+            f"===== 模板结束 =====\n\n"
             f"今晚的对话：\n{context}"
         )
 
