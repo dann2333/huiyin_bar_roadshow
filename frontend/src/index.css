@@ -901,6 +901,152 @@ body {
   box-shadow: 0 4px 12px rgba(0, 102, 255, 0.2);
 }
 
+/* ===== 左上角按钮组 ===== */
+.top-left-actions {
+  position: fixed;
+  top: 1rem;
+  left: 1rem;
+  z-index: 100;
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* 覆盖 doc-trigger 在 top-left-actions 中的定位 */
+.top-left-actions .doc-trigger {
+  position: static;
+}
+
+/* ===== 设置弹窗 ===== */
+.settings-modal {
+  position: relative;
+  width: min(90vw, 480px);
+  max-height: 85vh;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  overflow-y: auto;
+  padding: 2rem 2.5rem;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  animation: slideUp 0.3s ease;
+}
+
+.settings-title {
+  font-family: var(--font-serif);
+  font-size: 1.4rem;
+  color: var(--amber-400);
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.settings-section {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-section:last-of-type {
+  border-bottom: none;
+  margin-bottom: 0.5rem;
+}
+
+.settings-section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+/* 语言切换 */
+.settings-lang-group {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.settings-lang-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.settings-lang-btn:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.settings-lang-btn.active {
+  border-color: var(--amber-400);
+  color: var(--amber-400);
+  background: rgba(245, 158, 11, 0.08);
+  box-shadow: 0 0 12px var(--amber-glow);
+}
+
+/* 表单 */
+.settings-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+  margin-top: 0.6rem;
+}
+
+.settings-input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.85rem;
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.settings-input:focus {
+  border-color: var(--amber-600);
+  box-shadow: 0 0 0 3px var(--amber-glow);
+}
+
+.settings-input::placeholder {
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+}
+
+/* 底部保存区 */
+.settings-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.settings-msg {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+/* 移动端适配 */
+@media (max-width: 640px) {
+  .settings-modal {
+    padding: 1.5rem;
+    width: 95vw;
+  }
+
+  .top-left-actions {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+}
+
 /* ===== 背景音乐控制器 ===== */
 .music-control {
   position: fixed;

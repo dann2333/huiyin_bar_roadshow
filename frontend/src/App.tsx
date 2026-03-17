@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSSEStream } from './hooks/useSSEStream';
 import { useBackgroundMusic } from './hooks/use-background-music';
-import type { TavernEvent, DialogEntry, TavernState } from './types';
+import { getT } from './i18n';
+import type { Lang } from './i18n';
+import type { TavernEvent, TavernState } from './types';
 import './index.css';
 
 const API_BASE = 'http://localhost:8000';
@@ -107,6 +109,18 @@ function App() {
   // NOTE: 产品文档弹窗
   const [docOpen, setDocOpen] = useState(false);
   const [docContent, setDocContent] = useState('');
+  // NOTE: 语言 & i18n
+  const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('tavern_lang') as Lang) || 'zh');
+  const t = getT(lang);
+  // NOTE: 设置面板
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsData, setSettingsData] = useState({
+    language: lang as string,
+    llm: { base_url: '', api_key: '', model: '' },
+    zhihu: { app_key: '', app_secret: '' },
+  });
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState('');
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 背景音乐控制
@@ -447,8 +461,8 @@ function App() {
           <div className="page page-right" />
           <div className="book-base" />
         </div>
-        <p className="loading-text">正在翻阅客人名册...</p>
-        <p className="loading-hint">刘看山正在为你准备今晚的酒局</p>
+        <p className="loading-text">{t('loadingText')}</p>
+        <p className="loading-hint">{t('loadingHint')}</p>
       </div>
     );
   }
@@ -460,7 +474,7 @@ function App() {
         <button
           className={`music-toggle ${isPlaying ? 'playing' : ''}`}
           onClick={togglePlay}
-          title={isPlaying ? '暂停音乐' : '播放音乐'}
+          title={isPlaying ? t('musicPause') : t('musicPlay')}
         >
           {isPlaying ? '🎵' : '🔇'}
         </button>
@@ -473,7 +487,7 @@ function App() {
         </button>
         {musicPanelOpen && (
           <div className="music-panel">
-            <div className="music-panel-label">音量</div>
+            <div className="music-panel-label">{t('musicVolume')}</div>
             <input
               type="range"
               min="0"
@@ -488,24 +502,198 @@ function App() {
         )}
       </div>
 
-      {/* 左上角项目文档按钮 */}
-      <button
-        className="doc-trigger"
-        onClick={async () => {
-          setDocOpen(true);
-          if (!docContent) {
-            try {
-              const resp = await fetch('/product-doc.md');
-              const text = await resp.text();
-              setDocContent(text);
-            } catch {
-              setDocContent('# 加载失败\n\n无法加载项目文档。');
+      {/* 左上角按钮组 */}
+      <div className="top-left-actions">
+        <button
+          className="doc-trigger"
+          onClick={async () => {
+            setDocOpen(true);
+            if (!docContent) {
+              try {
+                const resp = await fetch('/product-doc.md');
+                const text = await resp.text();
+                setDocContent(text);
+              } catch {
+                setDocContent('# 加载失败\n\n无法加载项目文档。');
+              }
             }
-          }
-        }}
-      >
-        📖 项目文档
-      </button>
+          }}
+        >
+          {t('docTrigger')}
+        </button>
+        <button
+          className="doc-trigger"
+          onClick={async () => {
+            setSettingsOpen(true);
+            setSettingsMsg('');
+            setSettingsData(prev => ({ ...prev, language: lang }));
+            try {
+              const resp = await fetch(`${API_BASE}/api/settings`);
+              const data = await resp.json();
+              setSettingsData(data);
+            } catch {
+              setSettingsMsg(t('settingsLoadFail'));
+            }
+          }}
+        >
+          {t('settingsTrigger')}
+        </button>
+      </div>
+
+      {/* 设置弹窗 */}
+      {settingsOpen && (
+        <div className="doc-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-modal" onClick={e => e.stopPropagation()}>
+            <button className="doc-close" onClick={() => setSettingsOpen(false)}>×</button>
+            <h2 className="settings-title">{t('settingsTitle')}</h2>
+
+            {/* 语言切换 */}
+            <div className="settings-section">
+              <div className="settings-section-title">{t('settingsLanguage')}</div>
+              <div className="settings-lang-group">
+                <button
+                  className={`settings-lang-btn ${settingsData.language === 'zh' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSettingsData(prev => ({ ...prev, language: 'zh' }));
+                    setLang('zh');
+                    localStorage.setItem('tavern_lang', 'zh');
+                  }}
+                >
+                  中文
+                </button>
+                <button
+                  className={`settings-lang-btn ${settingsData.language === 'en' ? 'active' : ''}`}
+                  onClick={() => {
+                    setSettingsData(prev => ({ ...prev, language: 'en' }));
+                    setLang('en');
+                    localStorage.setItem('tavern_lang', 'en');
+                  }}
+                >
+                  English
+                </button>
+              </div>
+            </div>
+
+            {/* 大模型 API 配置 */}
+            <div className="settings-section">
+              <div className="settings-section-title">{t('settingsLlm')}</div>
+              <label className="settings-label">{t('settingsBaseUrl')}</label>
+              <input
+                className="settings-input"
+                value={settingsData.llm.base_url}
+                onChange={e => setSettingsData(prev => ({
+                  ...prev,
+                  llm: { ...prev.llm, base_url: e.target.value },
+                }))}
+                placeholder={(settingsData.llm as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+              />
+              <label className="settings-label">{t('settingsApiKey')}</label>
+              <input
+                className="settings-input"
+                value={settingsData.llm.api_key}
+                onChange={e => setSettingsData(prev => ({
+                  ...prev,
+                  llm: { ...prev.llm, api_key: e.target.value },
+                }))}
+                placeholder={(settingsData.llm as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+              />
+              <label className="settings-label">{t('settingsModel')}</label>
+              <input
+                className="settings-input"
+                value={settingsData.llm.model}
+                onChange={e => setSettingsData(prev => ({
+                  ...prev,
+                  llm: { ...prev.llm, model: e.target.value },
+                }))}
+                placeholder={(settingsData.llm as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+              />
+            </div>
+
+            {/* 知乎 API 配置 */}
+            <div className="settings-section">
+              <div className="settings-section-title">{t('settingsZhihu')}</div>
+              <label className="settings-label">{t('settingsAppKey')}</label>
+              <input
+                className="settings-input"
+                value={settingsData.zhihu.app_key}
+                onChange={e => setSettingsData(prev => ({
+                  ...prev,
+                  zhihu: { ...prev.zhihu, app_key: e.target.value },
+                }))}
+                placeholder={(settingsData.zhihu as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+              />
+              <label className="settings-label">{t('settingsAppSecret')}</label>
+              <input
+                className="settings-input"
+                value={settingsData.zhihu.app_secret}
+                onChange={e => setSettingsData(prev => ({
+                  ...prev,
+                  zhihu: { ...prev.zhihu, app_secret: e.target.value },
+                }))}
+                placeholder={(settingsData.zhihu as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+              />
+            </div>
+
+            {/* 底部按钮 */}
+            <div className="settings-footer">
+              {settingsMsg && <span className="settings-msg">{settingsMsg}</span>}
+              <button
+                className="action-btn"
+                disabled={settingsSaving}
+                onClick={async () => {
+                  setSettingsSaving(true);
+                  setSettingsMsg('');
+                  try {
+                    const resp = await fetch(`${API_BASE}/api/settings/reset`, { method: 'POST' });
+                    if (resp.ok) {
+                      setSettingsMsg(t('settingsResetOk'));
+                      setLang('zh');
+                      localStorage.setItem('tavern_lang', 'zh');
+                      const r = await fetch(`${API_BASE}/api/settings`);
+                      setSettingsData(await r.json());
+                    }
+                  } catch {
+                    setSettingsMsg(t('settingsResetFail'));
+                  } finally {
+                    setSettingsSaving(false);
+                  }
+                }}
+              >
+                {t('settingsResetBtn')}
+              </button>
+              <button
+                className="send-btn"
+                disabled={settingsSaving}
+                onClick={async () => {
+                  setSettingsSaving(true);
+                  setSettingsMsg('');
+                  try {
+                    const resp = await fetch(`${API_BASE}/api/settings`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(settingsData),
+                    });
+                    if (resp.ok) {
+                      setSettingsMsg(t('settingsSaveOk'));
+                      const r = await fetch(`${API_BASE}/api/settings`);
+                      setSettingsData(await r.json());
+                    } else {
+                      const data = await resp.json();
+                      setSettingsMsg(`❌ ${data.error || t('settingsSaveFail')}`);
+                    }
+                  } catch {
+                    setSettingsMsg(t('settingsNetErr'));
+                  } finally {
+                    setSettingsSaving(false);
+                  }
+                }}
+              >
+                {settingsSaving ? t('settingsSaving') : t('settingsSaveBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 项目文档弹窗（左侧目录 + 右侧内容） */}
       {docOpen && (() => {
@@ -567,11 +755,11 @@ function App() {
           alt="刘看山酒保"
           className="bartender-avatar"
         />
-        <h1>回音酒馆</h1>
-        <p className="subtitle">Echo Tavern · 跨越时空的人生沙盘</p>
+        <h1>{t('tavernTitle')}</h1>
+        <p className="subtitle">{t('tavernSubtitle')}</p>
         {authStatus === 'success' && (
           <div className="engine-bar">
-            <span className="engine-label">✓ 已连接 SecondMe</span>
+            <span className="engine-label">{t('connectedSecondMe')}</span>
             <button
               className={`engine-toggle ${engine}`}
               onClick={async () => {
@@ -607,9 +795,9 @@ function App() {
       {authStatus === 'none' && (
         <div style={{ textAlign: 'center', padding: '2rem 0' }}>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
-            需要连接 SecondMe 来召唤时空客人
+            {t('authPrompt')}
           </p>
-          <button className="send-btn" onClick={handleLogin}>🔑 连接 SecondMe</button>
+          <button className="send-btn" onClick={handleLogin}>{t('authLogin')}</button>
         </div>
       )}
 
@@ -624,12 +812,8 @@ function App() {
       <div className="dialog-stream">
         {!started && authStatus === 'success' && (
           <div className="dialog-entry bartender">
-            <div className="dialog-speaker">🦊 刘看山</div>
-            <div className="dialog-content">
-              <em>*(一只北极狐正在擦拭吧台上的玻璃杯，抬头看了你一眼)*</em>
-              <br /><br />
-              深夜了，来一杯？...先说说今晚什么事让你推开了这扇门。
-            </div>
+            <div className="dialog-speaker">{t('bartenderName')}</div>
+            <div className="dialog-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(t('bartenderWelcome')) }} />
           </div>
         )}
 
@@ -646,11 +830,11 @@ function App() {
                     {entry.type === 'guest_now' && '🌊 '}
                     {entry.type === 'guest_alt' && '🌀 '}
                     {entry.type === 'guest_past'
-                      ? '刘看山请来的客人（当初）'
+                      ? t('guestPast')
                       : entry.type === 'guest_now'
-                        ? '刘看山请来的客人（如今）'
+                        ? t('guestNow')
                         : entry.type === 'guest_alt'
-                          ? '刘看山请来的客人（平行宇宙）'
+                          ? t('guestAlt')
                           : entry.speaker}
                   </div>
                 )}
@@ -670,7 +854,7 @@ function App() {
               alt="刘看山"
               className="waiting-avatar"
             />
-            <p className="waiting-text">刘看山正在张罗中...</p>
+            <p className="waiting-text">{t('waitingText')}</p>
             <div className="loading-dots"><span /><span /><span /></div>
           </div>
         )}
@@ -685,7 +869,7 @@ function App() {
               {/* NOTE: 自动对话模式切换按钮 */}
               {state.autoMode ? (
                 <button className="action-btn auto-stop" onClick={handleAutoStop}>
-                  ⏸ 暂停讨论
+                  {t('autoPause')}
                 </button>
               ) : (
                 <button
@@ -693,23 +877,23 @@ function App() {
                   onClick={handleAutoStart}
                   disabled={state.isLoading}
                 >
-                  ▶ 自动讨论
+                  {t('autoStart')}
                 </button>
               )}
               {!state.isLoading && !state.autoMode && (
                 <>
-                  <button className="action-btn butterfly" onClick={handleButterfly}>🦋 蝴蝶效应</button>
-                  <button className="action-btn" onClick={handleReceipt}>📜 生成箴言</button>
+                  <button className="action-btn butterfly" onClick={handleButterfly}>{t('butterfly')}</button>
+                  <button className="action-btn" onClick={handleReceipt}>{t('receipt')}</button>
                   {receiptText && (
                     <button
                       className={`action-btn share-zhihu ${shareStatus}`}
                       onClick={handleShareToZhihu}
                       disabled={shareStatus === 'sharing' || shareStatus === 'success'}
                     >
-                      {shareStatus === 'idle' && '📤 分享到知乎'}
-                      {shareStatus === 'sharing' && '⏳ 发布中...'}
-                      {shareStatus === 'success' && '✅ 已分享'}
-                      {shareStatus === 'error' && '❌ 重试分享'}
+                      {shareStatus === 'idle' && t('shareZhihu')}
+                      {shareStatus === 'sharing' && t('sharePublishing')}
+                      {shareStatus === 'success' && t('shareSuccess')}
+                      {shareStatus === 'error' && t('shareRetry')}
                     </button>
                   )}
                   {shareStatus === 'success' && shareUrl && (
@@ -719,7 +903,7 @@ function App() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      🔗 查看知乎圈子
+                      {t('shareLink')}
                     </a>
                   )}
                 </>
@@ -734,10 +918,10 @@ function App() {
               onKeyDown={handleKeyDown}
               placeholder={
                 state.autoMode
-                  ? '自动讨论进行中，点击暂停后可插话...'
+                  ? t('inputAuto')
                   : started
-                    ? '在辩论中插话...'
-                    : '说说今晚什么事让你推开了这扇门...'
+                    ? t('inputSpeaking')
+                    : t('inputStart')
               }
               disabled={state.isLoading || state.autoMode}
             />
@@ -746,7 +930,7 @@ function App() {
               onClick={handleSubmit}
               disabled={state.isLoading || !input.trim()}
             >
-              {started ? '发言' : '推门进入'}
+              {started ? t('btnSpeak') : t('btnEnter')}
             </button>
           </div>
         </div>

@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.auth import router as auth_router
 from app.api.tavern import router as tavern_router
 from app.api.social import router as social_router
+from app.api.settings import router as settings_router
 
 # 日志配置
 logging.basicConfig(
@@ -44,6 +45,7 @@ if os.path.isdir(_static_dir):
 app.include_router(auth_router)
 app.include_router(tavern_router)
 app.include_router(social_router)
+app.include_router(settings_router)
 
 
 @app.get("/")
