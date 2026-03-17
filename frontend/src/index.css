@@ -50,6 +50,73 @@
   --transition-slow: 500ms ease;
 }
 
+
+/* ===== 耳机提示欢迎页 ===== */
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #111118 0%, #0a0a0f 70%);
+}
+
+.welcome-card {
+  text-align: center;
+  padding: 3rem 2.5rem;
+  animation: fadeIn 0.8s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.welcome-icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+}
+
+.welcome-title {
+  font-family: var(--font-serif);
+  font-size: 1.8rem;
+  color: var(--amber-400);
+  margin-bottom: 1rem;
+}
+
+.welcome-desc {
+  font-size: 1rem;
+  color: var(--text-muted);
+  line-height: 2;
+  white-space: pre-line;
+  margin-bottom: 2.5rem;
+}
+
+.welcome-btn {
+  padding: 0.8rem 2.5rem;
+  border-radius: 12px;
+  border: 1px solid var(--amber-400);
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--amber-400);
+  font-size: 1.1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.welcome-btn:hover {
+  background: rgba(245, 158, 11, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.15);
+}
+
 /* --- 全局重置 --- */
 *,
 *::before,
@@ -397,6 +464,36 @@ body {
   margin: 0 auto;
   display: flex;
   gap: 0.75rem;
+  align-items: center;
+}
+
+/* 玩法指南按钮 */
+.guide-trigger {
+  padding: 0.85rem 1.2rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(22, 22, 31, 0.9);
+  backdrop-filter: blur(12px);
+  color: var(--amber-400);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s ease;
+}
+
+.guide-trigger:hover {
+  background: rgba(245, 158, 11, 0.15);
+  border-color: var(--amber-400);
+  transform: scale(1.05);
+}
+
+/* 玩法指南弹窗（比文档弹窗窄，无侧边栏） */
+.guide-modal {
+  width: min(92vw, 720px) !important;
+  height: 80vh !important;
 }
 
 .input-field {
@@ -641,13 +738,13 @@ body {
   top: 1rem;
   left: 1rem;
   z-index: 100;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.2rem;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(22, 22, 31, 0.9);
   backdrop-filter: blur(12px);
   color: var(--amber-400);
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 500;
   cursor: pointer;
   display: flex;
@@ -680,8 +777,8 @@ body {
 .doc-modal {
   position: relative;
   display: flex;
-  width: min(92vw, 980px);
-  height: 85vh;
+  width: min(96vw, 1400px);
+  height: 94vh;
   background: var(--bg-secondary);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 16px;
@@ -716,8 +813,8 @@ body {
 
 /* 左侧目录 */
 .doc-sidebar {
-  width: 240px;
-  min-width: 240px;
+  width: 280px;
+  min-width: 280px;
   background: var(--bg-primary);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   padding: 1.25rem 0;
@@ -728,7 +825,7 @@ body {
 
 .doc-sidebar-title {
   padding: 0 1.25rem 0.75rem;
-  font-size: 0.95rem;
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--amber-400);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
@@ -737,10 +834,10 @@ body {
 
 .doc-toc-item {
   display: block;
-  padding: 0.35rem 1.25rem;
+  padding: 0.4rem 1.25rem;
   color: var(--text-secondary);
   text-decoration: none;
-  font-size: 0.82rem;
+  font-size: 1.05rem;
   line-height: 1.5;
   transition: all 0.15s ease;
   border-left: 2px solid transparent;
@@ -756,7 +853,7 @@ body {
   font-weight: 600;
   color: var(--text-primary);
   margin-top: 0.5rem;
-  font-size: 0.85rem;
+  font-size: 1.08rem;
 }
 
 .doc-toc-item.level-2 {
@@ -766,22 +863,23 @@ body {
 
 .doc-toc-item.level-3 {
   padding-left: 2rem;
-  font-size: 0.78rem;
+  font-size: 1rem;
   color: var(--text-muted);
 }
 
 /* 右侧内容 */
 .doc-body {
   flex: 1;
-  padding: 2rem 2.5rem;
+  padding: 2rem 3rem;
   overflow-y: auto;
   color: var(--text-primary);
-  font-size: 0.92rem;
+  font-size: 1.1rem;
   line-height: 1.85;
 }
 
 .doc-body h2, .doc-body h3, .doc-body h4 {
-  margin-top: 1.5rem !important;
+  margin-top: 1.2rem !important;
+  margin-bottom: 0.3rem !important;
 }
 
 .doc-body hr {
@@ -794,7 +892,7 @@ body {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
-  font-size: 0.85rem;
+  font-size: 1.02rem;
 }
 
 .doc-body th, .doc-body td {
@@ -914,6 +1012,42 @@ body {
 /* 覆盖 doc-trigger 在 top-left-actions 中的定位 */
 .top-left-actions .doc-trigger {
   position: static;
+}
+
+/* ===== 右上角退出按钮 ===== */
+.top-right-actions {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 100;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.logout-btn {
+  padding: 0.6rem 1.2rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(22, 22, 31, 0.9);
+  backdrop-filter: blur(12px);
+  color: var(--amber-400);
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+}
+
+.logout-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(239, 68, 68, 0.2);
 }
 
 /* ===== 设置弹窗 ===== */
@@ -1045,6 +1179,63 @@ body {
     flex-direction: column;
     gap: 0.35rem;
   }
+}
+
+/* ===== 蝴蝶效应弹窗 ===== */
+.butterfly-modal {
+  position: relative;
+  width: min(88vw, 440px);
+  background: var(--bg-secondary);
+  border: 1px solid rgba(139, 92, 246, 0.15);
+  border-radius: 20px;
+  padding: 2.5rem 2.5rem 2rem;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6),
+              0 0 40px rgba(139, 92, 246, 0.08);
+  animation: slideUp 0.35s ease;
+  text-align: center;
+}
+
+.butterfly-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+  animation: butterflyFloat 3s ease-in-out infinite;
+}
+
+@keyframes butterflyFloat {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-8px) rotate(3deg); }
+}
+
+.butterfly-title {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  color: #c084fc;
+  margin-bottom: 0.5rem;
+}
+
+.butterfly-desc {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+  line-height: 1.5;
+}
+
+.butterfly-input {
+  margin-bottom: 0;
+  border-color: rgba(139, 92, 246, 0.2) !important;
+  text-align: left;
+}
+
+.butterfly-input:focus {
+  border-color: #a855f7 !important;
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12) !important;
+}
+
+.butterfly-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
 }
 
 /* ===== 背景音乐控制器 ===== */

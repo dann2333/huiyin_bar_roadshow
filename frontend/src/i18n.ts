@@ -12,11 +12,25 @@ const translations = {
     // 顶部按钮
     docTrigger: '📖 项目文档',
     settingsTrigger: '⚙️ 设置',
+    logoutBtn: '🚪 退出登录',
+    logoutTip: '清除登录状态，重新连接 SecondMe',
+    newSessionBtn: '🍺 新的酒局',
+    newSessionTip: '开始一场新的酒局',
+
+    // 耳机提示页
+    welcomeTitle: '欢迎来到回音酒馆',
+    welcomeDesc: '为了更好的体验\n建议佩戴耳机，打开音量 🎶',
+    welcomeConfirm: '✨ 我准备好了',
 
     // 标题
     tavernTitle: '回音酒馆',
     tavernSubtitle: 'Echo Tavern · 跨越时空的人生沙盘',
     connectedSecondMe: '✓ 已连接 SecondMe',
+
+    // 引擎切换
+    customModelLabel: '🤖 定制模型',
+    customModelActive: '当前：定制模型，点击切换',
+    customModelNotConfigured: '请先在设置中填写自定义模型 API 配置',
 
     // 设置弹窗
     settingsTitle: '⚙️ 设置',
@@ -66,7 +80,15 @@ const translations = {
     sharePublishing: '⏳ 发布中...',
     shareSuccess: '✅ 已分享',
     shareRetry: '❌ 重试分享',
+    shareCooldown: '⏳ 请稍候...',
     shareLink: '🔗 查看知乎圈子',
+
+    // 蝴蝶效应弹窗
+    butterflyTitle: '蝴蝶效应',
+    butterflyDesc: '如果当年做了不同的选择，人生会怎样...',
+    butterflyPlaceholder: '描述你设想的另一种选择...',
+    butterflyConfirm: '召唤平行宇宙',
+    butterflyCancel: '再想想',
 
     // 输入区
     inputAuto: '自动讨论进行中，点击暂停后可插话...',
@@ -76,6 +98,7 @@ const translations = {
     btnEnter: '推门进入',
 
     // 文档
+    guideTrigger: '❓ 玩法指南',
     docLoadFail: '# 加载失败\n\n无法加载项目文档。',
   },
   en: {
@@ -84,10 +107,22 @@ const translations = {
 
     docTrigger: '📖 Docs',
     settingsTrigger: '⚙️ Settings',
+    logoutBtn: '🚪 Logout',
+    logoutTip: 'Clear login state and reconnect SecondMe',
+    newSessionBtn: '🍺 New Session',
+    newSessionTip: 'Start a new tavern session',
+
+    welcomeTitle: 'Welcome to Echo Tavern',
+    welcomeDesc: 'For the best experience\nplease wear headphones and turn up the volume 🎶',
+    welcomeConfirm: '✨ I\'m Ready',
 
     tavernTitle: 'Echo Tavern',
     tavernSubtitle: 'A Time-Crossing Life Sandbox',
     connectedSecondMe: '✓ Connected to SecondMe',
+
+    customModelLabel: '🤖 Custom Model',
+    customModelActive: 'Current: Custom Model, click to switch',
+    customModelNotConfigured: 'Please configure the custom model API in Settings first',
 
     settingsTitle: '⚙️ Settings',
     settingsLanguage: '🌐 Language',
@@ -132,7 +167,14 @@ const translations = {
     sharePublishing: '⏳ Publishing...',
     shareSuccess: '✅ Shared',
     shareRetry: '❌ Retry',
+    shareCooldown: '⏳ Please wait...',
     shareLink: '🔗 View on Zhihu',
+
+    butterflyTitle: 'Butterfly Effect',
+    butterflyDesc: 'What if you had made a different choice back then...',
+    butterflyPlaceholder: 'Describe the alternative path you imagine...',
+    butterflyConfirm: 'Summon Parallel Universe',
+    butterflyCancel: 'Let me think',
 
     inputAuto: 'Auto discussion in progress, pause to chime in...',
     inputSpeaking: 'Join the conversation...',
@@ -140,6 +182,7 @@ const translations = {
     btnSpeak: 'Speak',
     btnEnter: 'Push the door',
 
+    guideTrigger: '❓ Guide',
     docLoadFail: '# Load Failed\n\nUnable to load documentation.',
   },
 } as const;

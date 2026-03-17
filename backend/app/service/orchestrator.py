@@ -18,6 +18,7 @@ from app.prompt.bartender import (
 )
 from app.schema.models import TavernSession, TavernEvent, GuestProfile
 from app.service.guest_builder import GuestBuilder
+from app.utils.safe_json import load_json, save_json, update_json
 
 logger = logging.getLogger(__name__)
 
@@ -26,28 +27,23 @@ SESSION_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "session_stor
 
 
 def _load_sessions() -> dict[str, TavernSession]:
-    """从文件加载所有酒局会话"""
+    """从文件加载所有酒局会话（线程安全）"""
     try:
-        if os.path.exists(SESSION_FILE):
-            with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                raw = json.load(f)
-            return {
-                k: TavernSession.model_validate(v)
-                for k, v in raw.items()
-            }
-    except (json.JSONDecodeError, IOError, Exception) as e:
-        logger.warning("Session 文件读取失败: %s", e)
+        raw = load_json(SESSION_FILE)
+        return {
+            k: TavernSession.model_validate(v)
+            for k, v in raw.items()
+        }
+    except Exception as e:
+        logger.warning("Session 反序列化失败: %s", e)
     return {}
 
 
 def _save_sessions(sessions: dict[str, TavernSession]) -> None:
-    """将酒局会话存储写入文件"""
-    try:
-        raw = {k: v.model_dump() for k, v in sessions.items()}
-        with open(SESSION_FILE, "w", encoding="utf-8") as f:
-            json.dump(raw, f, ensure_ascii=False)
-    except IOError as e:
-        logger.error("Session 文件写入失败: %s", e)
+    """将酒局会话存储写入文件（线程安全）"""
+    raw = {k: v.model_dump() for k, v in sessions.items()}
+    save_json(SESSION_FILE, raw)
+
 
 
 class TavernOrchestrator:

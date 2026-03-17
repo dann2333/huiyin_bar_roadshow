@@ -9,6 +9,17 @@ import './index.css';
 const API_BASE = 'http://localhost:8000';
 
 /**
+ * 播放一次性音效（不影响背景音乐）
+ * @param src 音频文件路径
+ * @param vol 音量（0-1），默认 0.75
+ */
+function playSfx(src: string, vol = 0.75): void {
+  const audio = new Audio(src);
+  audio.volume = vol;
+  audio.play().catch(() => { /* 浏览器自动播放策略，静默失败 */ });
+}
+
+/**
  * 轻量 Markdown → HTML 渲染
  * 处理标题、粗体、斜体、列表、表格、分割线、引用块、换行
  * NOTE: 顺序很重要——先处理表格（多行结构），再处理行内元素
@@ -58,6 +69,8 @@ function renderMarkdown(text: string): string {
     .replace(/^###\s+(.+)$/gm, '<h4 style="color:var(--amber-400);margin:0.5rem 0">$1</h4>')
     .replace(/^##\s+(.+)$/gm, '<h3 style="color:var(--amber-400);margin:0.8rem 0 0.3rem">$1</h3>')
     .replace(/^#\s+(.+)$/gm, '<h2 style="color:var(--amber-400);margin:1rem 0 0.5rem">$1</h2>')
+    // 图片 ![alt](src)
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" style="max-width:100%;border-radius:8px;margin:0.5rem 0" />')
     // **粗体**（必须在 *斜体* 之前）
     .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--amber-200)">$1</strong>')
     // *斜体/动作描述*
@@ -66,8 +79,26 @@ function renderMarkdown(text: string): string {
     .replace(/^[-•]\s+(.+)$/gm, '<div style="padding-left:1rem;margin:0.2rem 0">• $1</div>')
     // 数字列表
     .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="padding-left:1rem;margin:0.2rem 0">$1. $2</div>')
-    // 换行
-    .replace(/\n/g, '<br/>');
+    // 换行：先合并连续空行，再转 <br/>
+    .replace(/\n{2,}/g, '\n')
+    .replace(/\n/g, '<br/>')
+    // NOTE: 清除块级元素前后多余的 <br/>，避免标题和内容间出现过大空白
+    .replace(/(<br\/>)+(<h[2-4])/g, '$2')
+    .replace(/(<\/h[2-4]>)(<br\/>)+/g, '$1')
+    .replace(/(<br\/>)+(<hr\/>)/g, '$2')
+    .replace(/(<hr\/>)(<br\/>)+/g, '$1')
+    .replace(/(<br\/>)+(<table>)/g, '$2')
+    .replace(/(<\/table>)(<br\/>)+/g, '$1')
+    .replace(/(<br\/>)+(<blockquote>)/g, '$2')
+    .replace(/(<\/blockquote>)(<br\/>)+/g, '$1')
+    .replace(/(<br\/>)+(<div )/g, '$2')
+    .replace(/(<\/div>)(<br\/>)+/g, '$1')
+    .replace(/(<br\/>)+(<img )/g, '$2')
+    // NOTE: 清理表格内部的 <br/>
+    .replace(/<table>(<br\/>)+/g, '<table>')
+    .replace(/(<br\/>)+<\/table>/g, '</table>')
+    .replace(/<\/tr>(<br\/>)+<tr>/g, '</tr><tr>')
+    .replace(/<\/tr>(<br\/>)+<\/table>/g, '</tr></table>');
 }
 
 /**
@@ -97,18 +128,25 @@ function App() {
   const [input, setInput] = useState('');
   const [started, setStarted] = useState(false);
   const [authStatus, setAuthStatus] = useState<'checking' | 'success' | 'none'>('checking');
+  // NOTE: 首次登录耳机提示页
+  const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
+    return localStorage.getItem('tavern_welcome_done') === 'true';
+  });
   // NOTE: 箴言分享相关状态
   const [receiptText, setReceiptText] = useState('');
   const [userConcern, setUserConcern] = useState('');
-  const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'success' | 'error'>('idle');
+  const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'success' | 'error' | 'cooldown'>('idle');
   const [shareUrl, setShareUrl] = useState('');
   const [guestName, setGuestName] = useState('');
   // NOTE: AI 引擎状态
-  const [engine, setEngine] = useState<'qwen' | 'secondme'>('qwen');
+  const [engine, setEngine] = useState<'qwen' | 'secondme'>('secondme');
   const [engineSwitching, setEngineSwitching] = useState(false);
   // NOTE: 产品文档弹窗
   const [docOpen, setDocOpen] = useState(false);
   const [docContent, setDocContent] = useState('');
+  // NOTE: 玩法指南弹窗
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideContent, setGuideContent] = useState('');
   // NOTE: 语言 & i18n
   const [lang, setLang] = useState<Lang>(() => (localStorage.getItem('tavern_lang') as Lang) || 'zh');
   const t = getT(lang);
@@ -121,11 +159,16 @@ function App() {
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState('');
+  // NOTE: 蝴蝶效应弹窗
+  const [butterflyOpen, setButterflyOpen] = useState(false);
+  const [butterflyInput, setButterflyInput] = useState('');
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 背景音乐控制
-  const { isPlaying, volume, togglePlay, setVolume } = useBackgroundMusic('/audio/酒馆小曲.mp3');
+  const { isPlaying, volume, togglePlay, setVolume, play: playMusic } = useBackgroundMusic('/audio/酒馆小曲.mp3');
   const [musicPanelOpen, setMusicPanelOpen] = useState(true);
+  // NOTE: 跟踪是否已在首次提问时自动播放音乐
+  const musicAutoTriggeredRef = useRef(false);
   // NOTE: 使用 ref 确保回调中始终能拿到最新的 sessionKey
   const sessionKeyRef = useRef(getStoredSessionKey());
 
@@ -139,28 +182,29 @@ function App() {
     if (sessionFromUrl) {
       sessionKeyRef.current = sessionFromUrl;
       storeSessionKey(sessionFromUrl);
-      setState(prev => ({ ...prev, sessionKey: sessionFromUrl }));
-      setAuthStatus('success');
-      window.history.replaceState({}, '', '/');
+      // NOTE: 强制刷新页面，确保登录后 UI 完全重新初始化
+      window.location.href = '/';
       return;
     }
 
     // 情况 2：URL 中有 code（OAuth 回调，需要转发给后端换取 Token）
     if (code) {
       setAuthStatus('checking');
+      // NOTE: 从 sessionStorage 取出 state，与 code 一起发送给后端验证 CSRF
+      const storedState = sessionStorage.getItem('oauth_state') || '';
+      sessionStorage.removeItem('oauth_state');
       fetch(`${API_BASE}/api/auth/exchange`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code }),
+        body: JSON.stringify({ code, state: storedState }),
       })
         .then(resp => resp.json())
         .then(data => {
           if (data.session_key) {
             sessionKeyRef.current = data.session_key;
             storeSessionKey(data.session_key);
-            setState(prev => ({ ...prev, sessionKey: data.session_key }));
-            setAuthStatus('success');
-            window.history.replaceState({}, '', '/');
+            // NOTE: 强制刷新页面，确保登录后 UI 完全重新初始化
+            window.location.href = '/';
           } else {
             console.error('换取 Token 失败:', data);
             setAuthStatus('none');
@@ -196,6 +240,11 @@ function App() {
 
   /** 处理 SSE 事件 → 追加到对话流 */
   const handleEvent = useCallback((event: TavernEvent) => {
+    // NOTE: 音效播放放在 setState 外部，避免 React 严格模式 updater 被调用两次
+    if (event.type === 'stage' && event.stage === 3) {
+      playSfx('/audio/客人.mp3', 0.75);
+    }
+
     setState(prev => {
       const dialogs = [...prev.dialogs];
       // NOTE: 捕获后端推送的酒局 session_id
@@ -276,6 +325,15 @@ function App() {
       }],
     }));
 
+    // NOTE: 用户推门进入后立即播放问候音效
+    playSfx('/audio/问候.mp3');
+
+    // NOTE: 首次提问时自动开启背景音乐（仅一次）
+    if (!musicAutoTriggeredRef.current) {
+      musicAutoTriggeredRef.current = true;
+      playMusic();
+    }
+
     // NOTE: 使用 ref 确保拿到最新的 sessionKey
     await startStream(
       '/api/tavern/start',
@@ -313,11 +371,13 @@ function App() {
     );
   }, [input, state.sessionId, state.isLoading, startStream, handleEvent]);
 
-  /** 触发蝴蝶效应 */
-  const handleButterfly = useCallback(async () => {
-    const whatIf = prompt('如果当年做了什么不同的选择？');
+  /** 触发蝴蝶效应：调用 API 发起平行宇宙请求 */
+  const handleButterflySubmit = useCallback(async (whatIf: string) => {
     if (!whatIf || !state.sessionId) return;
     setState(prev => ({ ...prev, isLoading: true }));
+
+    // NOTE: 蝴蝶效应触发后播放音效
+    playSfx('/audio/蝴蝶效应.mp3');
 
     await startStream(
       '/api/tavern/butterfly',
@@ -338,6 +398,9 @@ function App() {
     });
     if (!state.sessionId || state.isLoading) return;
     setState(prev => ({ ...prev, isLoading: true, autoMode: true }));
+
+    // NOTE: 自动讨论模式启动音效
+    playSfx('/audio/自动.mp3');
 
     await startStream(
       '/api/tavern/auto-start',
@@ -399,6 +462,9 @@ function App() {
           timestamp: Date.now(),
         }],
       }));
+
+      // NOTE: 箴言生成后播放告别音效
+      playSfx('/audio/告别.mp3');
     } catch (err) {
       console.error('生成箴言失败:', err);
       setState(prev => ({ ...prev, isLoading: false }));
@@ -407,8 +473,12 @@ function App() {
 
   /** 分享箴言到知乎圈子 */
   const handleShareToZhihu = useCallback(async () => {
-    if (!receiptText || shareStatus === 'sharing') return;
+    if (!receiptText || shareStatus === 'sharing' || shareStatus === 'cooldown') return;
     setShareStatus('sharing');
+
+    // NOTE: 分享按钮点击音效
+    playSfx('/audio/分享.mp3');
+
     try {
       const resp = await fetch(`${API_BASE}/api/social/publish`, {
         method: 'POST',
@@ -426,16 +496,30 @@ function App() {
         setShareUrl(data.url);
       } else {
         console.error('分享失败:', data.error);
-        setShareStatus('error');
+        // NOTE: 错误后进入 3 秒冷却期，防止用户快速重试触发知乎 API 429 限流
+        setShareStatus('cooldown');
+        setTimeout(() => setShareStatus('idle'), 3000);
       }
     } catch (err) {
       console.error('分享异常:', err);
-      setShareStatus('error');
+      // NOTE: 网络异常同样进入冷却期
+      setShareStatus('cooldown');
+      setTimeout(() => setShareStatus('idle'), 3000);
     }
   }, [receiptText, userConcern, state.sessionId, shareStatus]);
 
   /** 发起 OAuth 登录 */
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    // NOTE: 先从后端获取随机 state 存入 sessionStorage，防止 CSRF 攻击
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/state`);
+      const data = await resp.json();
+      if (data.state) {
+        sessionStorage.setItem('oauth_state', data.state);
+      }
+    } catch (err) {
+      console.error('获取 OAuth state 失败:', err);
+    }
     window.location.href = `${API_BASE}/api/auth/login`;
   };
 
@@ -463,6 +547,28 @@ function App() {
         </div>
         <p className="loading-text">{t('loadingText')}</p>
         <p className="loading-hint">{t('loadingHint')}</p>
+      </div>
+    );
+  }
+
+  // NOTE: 已登录但首次进入，显示耳机提示页
+  if (authStatus === 'success' && !welcomeDismissed) {
+    return (
+      <div className="welcome-overlay">
+        <div className="welcome-card">
+          <div className="welcome-icon">🎧</div>
+          <h2 className="welcome-title">{t('welcomeTitle')}</h2>
+          <p className="welcome-desc">{t('welcomeDesc')}</p>
+          <button
+            className="welcome-btn"
+            onClick={() => {
+              setWelcomeDismissed(true);
+              localStorage.setItem('tavern_welcome_done', 'true');
+            }}
+          >
+            {t('welcomeConfirm')}
+          </button>
+        </div>
       </div>
     );
   }
@@ -539,6 +645,38 @@ function App() {
           {t('settingsTrigger')}
         </button>
       </div>
+
+      {/* 右上角退出登录按钮 */}
+      {authStatus === 'success' && (
+        <div className="top-right-actions">
+          <button
+            className="logout-btn"
+            onClick={() => window.location.reload()}
+            title={t('newSessionTip')}
+          >
+            {t('newSessionBtn')}
+          </button>
+          <button
+            className="logout-btn"
+            onClick={async () => {
+              try {
+                await fetch(`${API_BASE}/api/auth/logout`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ session_key: sessionKeyRef.current }),
+                });
+              } catch { /* 静默失败 */ }
+              localStorage.removeItem('tavern_session_key');
+              localStorage.removeItem('tavern_token');
+              localStorage.removeItem('tavern_welcome_done');
+              window.location.reload();
+            }}
+            title={t('logoutTip')}
+          >
+            {t('logoutBtn')}
+          </button>
+        </div>
+      )}
 
       {/* 设置弹窗 */}
       {settingsOpen && (
@@ -695,6 +833,49 @@ function App() {
         </div>
       )}
 
+      {/* 蝴蝶效应弹窗 */}
+      {butterflyOpen && (
+        <div className="doc-overlay" onClick={() => setButterflyOpen(false)}>
+          <div className="butterfly-modal" onClick={e => e.stopPropagation()}>
+            <button className="doc-close" onClick={() => setButterflyOpen(false)}>×</button>
+            <div className="butterfly-icon">🦋</div>
+            <h2 className="butterfly-title">{t('butterflyTitle')}</h2>
+            <p className="butterfly-desc">{t('butterflyDesc')}</p>
+            <input
+              className="settings-input butterfly-input"
+              value={butterflyInput}
+              onChange={e => setButterflyInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && butterflyInput.trim()) {
+                  setButterflyOpen(false);
+                  handleButterflySubmit(butterflyInput.trim());
+                }
+              }}
+              placeholder={t('butterflyPlaceholder')}
+              autoFocus
+            />
+            <div className="butterfly-footer">
+              <button
+                className="action-btn"
+                onClick={() => setButterflyOpen(false)}
+              >
+                {t('butterflyCancel')}
+              </button>
+              <button
+                className="send-btn"
+                disabled={!butterflyInput.trim()}
+                onClick={() => {
+                  setButterflyOpen(false);
+                  handleButterflySubmit(butterflyInput.trim());
+                }}
+              >
+                {t('butterflyConfirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 项目文档弹窗（左侧目录 + 右侧内容） */}
       {docOpen && (() => {
         // 从 markdown 内容提取标题生成目录
@@ -764,8 +945,19 @@ function App() {
               className={`engine-toggle ${engine}`}
               onClick={async () => {
                 if (engineSwitching) return;
-                setEngineSwitching(true);
                 const target = engine === 'qwen' ? 'secondme' : 'qwen';
+                // NOTE: 切换到定制模型前，先检查是否已配置 API
+                if (target === 'qwen') {
+                  try {
+                    const check = await fetch(`${API_BASE}/api/tavern/engine`);
+                    const info = await check.json();
+                    if (!info.qwen_available) {
+                      alert(t('customModelNotConfigured'));
+                      return;
+                    }
+                  } catch { return; }
+                }
+                setEngineSwitching(true);
                 try {
                   const resp = await fetch(`${API_BASE}/api/tavern/engine`, {
                     method: 'POST',
@@ -781,11 +973,11 @@ function App() {
                 }
               }}
               disabled={engineSwitching}
-              title={`当前: ${engine === 'qwen' ? '通义千问' : 'SecondMe'}，点击切换`}
+              title={engine === 'qwen' ? t('customModelActive') : 'SecondMe'}
             >
               <span className="engine-dot" />
               <span className="engine-name">
-                {engine === 'qwen' ? '🤖 Qwen' : '🧠 SecondMe'}
+                {engine === 'qwen' ? t('customModelLabel') : '🧠 SecondMe'}
               </span>
             </button>
           </div>
@@ -882,18 +1074,19 @@ function App() {
               )}
               {!state.isLoading && !state.autoMode && (
                 <>
-                  <button className="action-btn butterfly" onClick={handleButterfly}>{t('butterfly')}</button>
+                  <button className="action-btn butterfly" onClick={() => { setButterflyInput(''); setButterflyOpen(true); }}>{t('butterfly')}</button>
                   <button className="action-btn" onClick={handleReceipt}>{t('receipt')}</button>
                   {receiptText && (
                     <button
                       className={`action-btn share-zhihu ${shareStatus}`}
                       onClick={handleShareToZhihu}
-                      disabled={shareStatus === 'sharing' || shareStatus === 'success'}
+                      disabled={shareStatus === 'sharing' || shareStatus === 'success' || shareStatus === 'cooldown'}
                     >
                       {shareStatus === 'idle' && t('shareZhihu')}
                       {shareStatus === 'sharing' && t('sharePublishing')}
                       {shareStatus === 'success' && t('shareSuccess')}
                       {shareStatus === 'error' && t('shareRetry')}
+                      {shareStatus === 'cooldown' && t('shareCooldown')}
                     </button>
                   )}
                   {shareStatus === 'success' && shareUrl && (
@@ -911,6 +1104,24 @@ function App() {
             </div>
           )}
           <div className="input-container">
+            <button
+              className="guide-trigger"
+              title={t('guideTrigger')}
+              onClick={async () => {
+                setGuideOpen(true);
+                if (!guideContent) {
+                  try {
+                    const resp = await fetch('/guide.md');
+                    const text = await resp.text();
+                    setGuideContent(text);
+                  } catch {
+                    setGuideContent('# 加载失败\n\n无法加载玩法指南。');
+                  }
+                }
+              }}
+            >
+              {t('guideTrigger')}
+            </button>
             <input
               className="input-field"
               value={input}
@@ -932,6 +1143,22 @@ function App() {
             >
               {started ? t('btnSpeak') : t('btnEnter')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 玩法指南弹窗 */}
+      {guideOpen && (
+        <div className="doc-overlay" onClick={() => setGuideOpen(false)}>
+          <div
+            className="doc-modal guide-modal"
+            onClick={e => e.stopPropagation()}
+          >
+            <button className="doc-close" onClick={() => setGuideOpen(false)}>✕</button>
+            <div
+              className="doc-body"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(guideContent) }}
+            />
           </div>
         </div>
       )}

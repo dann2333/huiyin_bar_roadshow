@@ -13,7 +13,7 @@ export function useBackgroundMusic(src: string) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY_VOLUME);
-    return saved ? parseFloat(saved) : 0.3;
+    return saved ? parseFloat(saved) : 0.25;
   });
   // NOTE: 标记用户是否已经有过交互，用于处理浏览器自动播放限制
   const hasInteractedRef = useRef(false);
@@ -95,5 +95,17 @@ export function useBackgroundMusic(src: string) {
     localStorage.setItem(STORAGE_KEY_VOLUME, String(clamped));
   }, []);
 
-  return { isPlaying, volume, togglePlay, setVolume };
+  /** 主动播放（如果当前未播放） */
+  const play = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || !audio.paused) return;
+    audio.play()
+      .then(() => {
+        setIsPlaying(true);
+        localStorage.setItem(STORAGE_KEY_PLAYING, 'true');
+      })
+      .catch(() => { /* 静默失败 */ });
+  }, []);
+
+  return { isPlaying, volume, togglePlay, setVolume, play };
 }

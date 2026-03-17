@@ -20,7 +20,10 @@ dist/
 
 # ===== 持久化数据文件 =====
 token_store.json
+state_store.json
 session_store.json
+# NOTE: safe_json 原子写入产生的临时文件
+*.json.tmp
 
 # ===== 日志 =====
 *.log

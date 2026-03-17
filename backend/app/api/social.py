@@ -2,7 +2,6 @@
 知乎社交路由
 处理发布箴言到知乎圈子、评论、点赞等社交互动
 """
-import json
 import logging
 import os
 import re
@@ -13,6 +12,7 @@ from fastapi.responses import JSONResponse
 from app.client.zhihu import ZhihuClient
 from app.schema.models import PublishRequest
 from app.config import ZhihuConfig
+from app.utils.safe_json import load_json
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["社交"])
@@ -34,7 +34,7 @@ SESSION_FILE = os.path.join(os.path.dirname(__file__), "..", "..", "session_stor
 
 def _load_guest_names(session_id: str) -> dict[str, str]:
     """
-    从 session 文件中加载客人真实用户名 → 匿名标签的映射
+    从 session 文件中加载客人真实用户名 → 匿名标签的映射（线程安全）
     返回 {真实名字: 匿名标签} 字典，按名字长度降序排列
     """
     # NOTE: 角色 → 匿名标签对照
@@ -45,21 +45,19 @@ def _load_guest_names(session_id: str) -> dict[str, str]:
     }
     name_map: dict[str, str] = {}
     try:
-        if os.path.exists(SESSION_FILE):
-            with open(SESSION_FILE, "r", encoding="utf-8") as f:
-                sessions = json.load(f)
-            session = sessions.get(session_id, {})
-            for role, label in role_labels.items():
-                guest = session.get(role)
-                if guest and guest.get("author_name"):
-                    full_name = guest["author_name"]
-                    # 完整名字（可能带年份后缀）→ 角色标签
-                    name_map[full_name] = label
-                    # 基础名字（去掉括号内容）→ 角色标签
-                    base_name = re.sub(r'[（(].+?[）)]', '', full_name).strip()
-                    if base_name and base_name != full_name and base_name not in name_map:
-                        name_map[base_name] = label
-    except (json.JSONDecodeError, IOError, Exception) as e:
+        sessions = load_json(SESSION_FILE)
+        session = sessions.get(session_id, {})
+        for role, label in role_labels.items():
+            guest = session.get(role)
+            if guest and guest.get("author_name"):
+                full_name = guest["author_name"]
+                # 完整名字（可能带年份后缀）→ 角色标签
+                name_map[full_name] = label
+                # 基础名字（去掉括号内容）→ 角色标签
+                base_name = re.sub(r'[（(].+?[）)]', '', full_name).strip()
+                if base_name and base_name != full_name and base_name not in name_map:
+                    name_map[base_name] = label
+    except Exception as e:
         logger.warning("读取 session 提取客人名字失败: %s", e)
     logger.info("匿名化映射: %s", name_map)
     return name_map

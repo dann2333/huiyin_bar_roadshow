@@ -32,9 +32,27 @@
 
 通过左上角 ⚙️ **设置面板** 可一键切换中英文界面。语言偏好自动持久化到浏览器，刷新后保持选择。
 
-### 🎵 背景音乐
+### 🎵 背景音乐 & 音效系统
 
-内置酒馆氛围背景音乐，支持播放/暂停与音量调节。默认自动播放，音量面板默认展开。用户的播放偏好通过 localStorage 持久化。
+内置酒馆氛围背景音乐，支持播放/暂停与音量调节。默认自动播放，音量 25%。首次提问时自动开启背景音乐。
+
+各个关键时刻还配有专属音效：
+
+| 触发时机 | 音效文件 | 音量 |
+|----------|----------|------|
+| 用户提交困惑 | 问候.mp3 | 75% |
+| 第三幕开始 | 客人.mp3 | 75% |
+| 触发蝴蝶效应 | 蝴蝶效应.mp3 | 75% |
+| 启动自动讨论 | 自动.mp3 | 75% |
+| 分享到知乎 | 分享.mp3 | 75% |
+| 生成箴言 | 告别.mp3 | 75% |
+
+### 🚪 登录管理
+
+- 右上角 **🍺 新的酒局** 按钮：刷新页面开始新对话
+- 右上角 **🚪 退出登录** 按钮：清除 Token，重新登录 SecondMe
+- 首次登录时显示 **🎧 耳机提示页**，建议用户佩戴耳机、打开音量
+- 输入框左侧 **❓ 玩法指南** 按钮：点击查看详细操作流程
 
 ## 🏗️ 技术架构
 
@@ -57,13 +75,15 @@
 - **前端**：React 19 + TypeScript + Vite
 - **后端**：Python 3.10+ / FastAPI / Uvicorn
 - **AI 引擎**：
-  - **通义千问（Qwen）**：OpenAI 兼容格式，支持多轮对话（默认引擎）
-  - **SecondMe**：OAuth2 + SSE 流式对话（备选引擎）
+  - **SecondMe**：OAuth2 + SSE 流式对话（默认引擎）
+  - **定制模型**：支持通义千问等 OpenAI 兼容格式模型（在设置中配置 API Key 后可启用）
   - 运行时可通过 UI 一键切换
 - **数据源**：知乎开放 API（全网搜索 + 用户内容）
 - **通信**：Server-Sent Events (SSE) 实现实时流式输出
 - **国际化**：轻量 i18n 翻译系统（中/英双语）
 - **持久化**：Session / Token / 语言偏好 均持久化，支持热重载
+- **安全**：OAuth2 CSRF state 验证、Token 自动刷新、线程安全 JSON 原子写入
+- **多用户隔离**：引擎切换、Token 存储、酒局会话 均按用户独立隔离
 
 ## 📁 项目结构
 
@@ -89,18 +109,27 @@ huiyin_bar/
 │   │   │   ├── guest_present.py # 如今的大牛
 │   │   │   └── guest_parallel.py # 平行宇宙大牛
 │   │   ├── schema/              # Pydantic 数据模型
+│   │   ├── utils/               # 工具模块
+│   │   │   └── safe_json.py     # 线程安全 JSON 读写（per-file 锁 + 原子写入）
 │   │   ├── config.py            # 配置管理（运行时更新 + 脱敏 + 语言设置）
 │   │   └── main.py              # FastAPI 入口
 │   └── requirements.txt
 ├── frontend/
 │   ├── public/
-│   │   ├── audio/               # 背景音乐素材
-│   │   │   └── 酒馆小曲.mp3
+│   │   ├── audio/               # 音频素材
+│   │   │   ├── 酒馆小曲.mp3      # 背景音乐
+│   │   │   ├── 问候.mp3          # 推门进入音效
+│   │   │   ├── 客人.mp3          # 客人落座音效
+│   │   │   ├── 蝴蝶效应.mp3      # 蝴蝶效应触发音效
+│   │   │   ├── 自动.mp3          # 自动讨论音效
+│   │   │   ├── 分享.mp3          # 分享音效
+│   │   │   └── 告别.mp3          # 箴言生成音效
 │   │   ├── images/              # 刘看山 IP 形象素材
-│   │   └── product-doc.md       # 项目技术文档（弹窗展示）
+│   │   ├── product-doc.md       # 项目技术文档（弹窗展示）
+│   │   └── guide.md             # 玩法指南（弹窗展示）
 │   └── src/
 │       ├── App.tsx              # 主应用组件（含引擎切换、设置面板）
-│       ├── i18n.ts              # 多语言翻译表（中/英 50+ key）
+│       ├── i18n.ts              # 多语言翻译表（中/英 70+ key）
 │       ├── index.css            # 暗黑酒馆主题样式
 │       ├── hooks/
 │       │   ├── useSSEStream.ts  # SSE 流式数据 Hook
@@ -120,7 +149,7 @@ huiyin_bar/
 - Node.js 18+
 - 知乎开放 API 密钥
 - SecondMe 开发者凭证
-- 通义千问 API Key（可选，推荐）
+- 通义千问 API Key（可选，配置后可作为定制模型）
 
 ### 1. 配置环境变量
 
@@ -136,7 +165,7 @@ SECONDME_CLIENT_ID=your_client_id
 SECONDME_CLIENT_SECRET=your_client_secret
 SECONDME_REDIRECT_URI=http://localhost:5173/auth/callback
 
-# 通义千问（Qwen）— 可选，配置后默认使用 Qwen 引擎
+# 通义千问（Qwen）— 可选，配置后可作为「定制模型」使用
 QWEN_API_KEY=your_qwen_api_key
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 QWEN_MODEL=qwen-plus
@@ -207,20 +236,22 @@ npx vite --port 5173 --host 0.0.0.0
 
 页面顶部 header 区域有引擎切换按钮，支持运行时一键切换：
 
-- **🤖 Qwen**（蓝色指示灯）— 通义千问，OpenAI 兼容格式，多轮对话
-- **🧠 SecondMe**（绿色指示灯）— SecondMe AI 分身
+- **🧠 SecondMe**（绿色指示灯）— 默认引擎，SecondMe AI 分身
+- **🤖 定制模型**（蓝色指示灯）— 需先在设置中配置自定义模型 API
 
-切换后当前对话中下一轮即生效，无需重新开局。
+切换仅影响当前用户，不会影响其他用户的引擎选择。切换后下一轮对话即生效。
 
 ### API 端点
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/tavern/engine` | 查询当前引擎 |
-| `POST` | `/api/tavern/engine` | 切换引擎 |
+| `GET` | `/api/auth/state` | 获取 OAuth2 CSRF state |
+| `GET` | `/api/tavern/engine` | 查询当前用户引擎 |
+| `POST` | `/api/tavern/engine` | 切换引擎（仅影响当前用户） |
 | `GET` | `/api/settings` | 获取当前配置（敏感字段已隐藏） |
 | `POST` | `/api/settings` | 更新配置 + 热重载 |
 | `POST` | `/api/settings/reset` | 恢复 .env 默认配置 |
+| `POST` | `/api/auth/logout` | 退出登录，清除 Token |
 
 ### 大牛匹配策略
 
