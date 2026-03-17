@@ -41,3 +41,6 @@ desktop.ini
 *.egg
 *.whl
 build/
+
+# ===== Gemini / Antigravity =====
+.gemini/

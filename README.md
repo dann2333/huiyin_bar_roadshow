@@ -28,6 +28,14 @@
 
 第三幕后可点击 **▶ 自动讨论**，两位时空客人将自动轮流对话（最多 5 轮），支持随时暂停。对话采用多轮 messages 格式传递上下文，每个 Agent 能真正"看到"对方说了什么。
 
+### 🌐 多语言支持
+
+通过左上角 ⚙️ **设置面板** 可一键切换中英文界面。语言偏好自动持久化到浏览器，刷新后保持选择。
+
+### 🎵 背景音乐
+
+内置酒馆氛围背景音乐，支持播放/暂停与音量调节。默认自动播放，音量面板默认展开。用户的播放偏好通过 localStorage 持久化。
+
 ## 🏗️ 技术架构
 
 ```
@@ -54,7 +62,8 @@
   - 运行时可通过 UI 一键切换
 - **数据源**：知乎开放 API（全网搜索 + 用户内容）
 - **通信**：Server-Sent Events (SSE) 实现实时流式输出
-- **持久化**：Session / Token 均持久化到文件，支持热重载
+- **国际化**：轻量 i18n 翻译系统（中/英双语）
+- **持久化**：Session / Token / 语言偏好 均持久化，支持热重载
 
 ## 📁 项目结构
 
@@ -65,7 +74,8 @@ huiyin_bar/
 │   │   ├── api/                 # API 路由层
 │   │   │   ├── auth.py          # OAuth2 认证（Token 持久化）
 │   │   │   ├── tavern.py        # 酒馆核心：开局/插话/蝴蝶效应/箴言/引擎切换
-│   │   │   └── social.py        # 知乎社交：发布箴言到圈子
+│   │   │   ├── social.py        # 知乎社交：发布箴言到圈子
+│   │   │   └── settings.py      # 设置 API：配置读取/更新/热重载/恢复默认
 │   │   ├── client/              # 外部 API 客户端
 │   │   │   ├── zhihu.py         # 知乎 API（HMAC-SHA256 签名）
 │   │   │   ├── secondme.py      # SecondMe API（OAuth2 + SSE）
@@ -79,18 +89,26 @@ huiyin_bar/
 │   │   │   ├── guest_present.py # 如今的大牛
 │   │   │   └── guest_parallel.py # 平行宇宙大牛
 │   │   ├── schema/              # Pydantic 数据模型
-│   │   ├── config.py            # 配置管理（SecondMe / Qwen / 知乎）
+│   │   ├── config.py            # 配置管理（运行时更新 + 脱敏 + 语言设置）
 │   │   └── main.py              # FastAPI 入口
 │   └── requirements.txt
 ├── frontend/
+│   ├── public/
+│   │   ├── audio/               # 背景音乐素材
+│   │   │   └── 酒馆小曲.mp3
+│   │   ├── images/              # 刘看山 IP 形象素材
+│   │   └── product-doc.md       # 项目技术文档（弹窗展示）
 │   └── src/
-│       ├── App.tsx              # 主应用组件（含引擎切换 UI）
+│       ├── App.tsx              # 主应用组件（含引擎切换、设置面板）
+│       ├── i18n.ts              # 多语言翻译表（中/英 50+ key）
 │       ├── index.css            # 暗黑酒馆主题样式
 │       ├── hooks/
-│       │   └── useSSEStream.ts  # SSE 流式数据 Hook
+│       │   ├── useSSEStream.ts  # SSE 流式数据 Hook
+│       │   └── use-background-music.ts  # 背景音乐管理 Hook
 │       └── types/
 │           └── index.ts         # TypeScript 类型定义
 ├── .env                         # 环境变量（不入库）
+├── .env.example                 # 环境变量模板
 └── .gitignore
 ```
 
@@ -106,7 +124,7 @@ huiyin_bar/
 
 ### 1. 配置环境变量
 
-在项目根目录创建 `.env` 文件：
+在项目根目录创建 `.env` 文件（参考 `.env.example`）：
 
 ```env
 # 知乎开放 API
@@ -157,6 +175,22 @@ npx vite --port 5173 --host 0.0.0.0
 5. 点击 **▶ 自动讨论** 让两位客人自动对话
 6. 触发 **🦋 蝴蝶效应** 探索平行人生
 7. 点击 **📜 生成箴言** 获取今夜精华
+8. 点击 **📤 分享到知乎** 将箴言发布到知乎圈子
+
+## ⚙️ 设置面板
+
+左上角 ⚙️ **设置** 按钮可打开配置面板：
+
+| 分区 | 功能 |
+|------|------|
+| 🌐 语言 | 中文 / English 一键切换，即时生效 |
+| 🤖 大模型 API | 自定义 Base URL、API Key、Model |
+| 📘 知乎 API | 自定义 App Key、App Secret |
+
+- 所有敏感字段（API Key / Secret）**不会在界面中显示**
+- 留空则保持当前 `.env` 默认配置不变
+- **恢复默认** 按钮可重新加载 `.env` 原始配置
+- 保存后后端自动热重载客户端实例，无需重启
 
 ## 🎭 角色系统
 
@@ -178,9 +212,15 @@ npx vite --port 5173 --host 0.0.0.0
 
 切换后当前对话中下一轮即生效，无需重新开局。
 
-对应后端 API：
-- `GET /api/tavern/engine` — 查询当前引擎
-- `POST /api/tavern/engine` — 切换引擎（body: `{"engine": "qwen"}` 或 `{"engine": "secondme"}`）
+### API 端点
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/tavern/engine` | 查询当前引擎 |
+| `POST` | `/api/tavern/engine` | 切换引擎 |
+| `GET` | `/api/settings` | 获取当前配置（敏感字段已隐藏） |
+| `POST` | `/api/settings` | 更新配置 + 热重载 |
+| `POST` | `/api/settings/reset` | 恢复 .env 默认配置 |
 
 ### 大牛匹配策略
 
