@@ -7,20 +7,59 @@ const API_BASE = 'http://localhost:8000';
 
 /**
  * 轻量 Markdown → HTML 渲染
- * 处理粗体、斜体、标题、列表、换行
- * NOTE: 顺序很重要——先处理 ** 粗体，再处理 * 斜体，避免冲突
+ * 处理标题、粗体、斜体、列表、表格、分割线、引用块、换行
+ * NOTE: 顺序很重要——先处理表格（多行结构），再处理行内元素
  */
 function renderMarkdown(text: string): string {
-  return text
-    // ## 标题 → h3 标签
+  // 先处理表格（多行结构，必须在换行替换之前）
+  const lines = text.split('\n');
+  const result: string[] = [];
+  let inTable = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    // 检测表格行（以 | 开头结尾）
+    if (line.startsWith('|') && line.endsWith('|')) {
+      // 跳过分隔行（|---|---|）
+      if (/^\|[\s\-:|]+\|$/.test(line)) continue;
+      const cells = line.slice(1, -1).split('|').map(c => c.trim());
+      if (!inTable) {
+        result.push('<table>');
+        result.push('<tr>' + cells.map(c => `<th>${c}</th>`).join('') + '</tr>');
+        inTable = true;
+      } else {
+        result.push('<tr>' + cells.map(c => `<td>${c}</td>`).join('') + '</tr>');
+      }
+      continue;
+    }
+    if (inTable) {
+      result.push('</table>');
+      inTable = false;
+    }
+    // 分割线
+    if (/^-{3,}$/.test(line)) {
+      result.push('<hr/>');
+      continue;
+    }
+    // 引用块
+    if (line.startsWith('> ')) {
+      result.push(`<blockquote>${line.slice(2)}</blockquote>`);
+      continue;
+    }
+    result.push(line);
+  }
+  if (inTable) result.push('</table>');
+
+  return result.join('\n')
+    // 标题
     .replace(/^###\s+(.+)$/gm, '<h4 style="color:var(--amber-400);margin:0.5rem 0">$1</h4>')
     .replace(/^##\s+(.+)$/gm, '<h3 style="color:var(--amber-400);margin:0.8rem 0 0.3rem">$1</h3>')
     .replace(/^#\s+(.+)$/gm, '<h2 style="color:var(--amber-400);margin:1rem 0 0.5rem">$1</h2>')
-    // **粗体** → strong（必须在 *斜体* 之前）
+    // **粗体**（必须在 *斜体* 之前）
     .replace(/\*\*(.+?)\*\*/g, '<strong style="color:var(--amber-200)">$1</strong>')
-    // *斜体/动作描述* → em
+    // *斜体/动作描述*
     .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    // - 列表项 → 带缩进
+    // - 列表项
     .replace(/^[-•]\s+(.+)$/gm, '<div style="padding-left:1rem;margin:0.2rem 0">• $1</div>')
     // 数字列表
     .replace(/^(\d+)\.\s+(.+)$/gm, '<div style="padding-left:1rem;margin:0.2rem 0">$1. $2</div>')
@@ -58,6 +97,9 @@ function App() {
   // NOTE: AI 引擎状态
   const [engine, setEngine] = useState<'qwen' | 'secondme'>('qwen');
   const [engineSwitching, setEngineSwitching] = useState(false);
+  // NOTE: 产品文档弹窗
+  const [docOpen, setDocOpen] = useState(false);
+  const [docContent, setDocContent] = useState('');
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 使用 ref 确保回调中始终能拿到最新的 sessionKey
@@ -365,6 +407,79 @@ function App() {
 
   return (
     <div className="tavern">
+      {/* 左上角项目文档按钮 */}
+      <button
+        className="doc-trigger"
+        onClick={async () => {
+          setDocOpen(true);
+          if (!docContent) {
+            try {
+              const resp = await fetch('/product-doc.md');
+              const text = await resp.text();
+              setDocContent(text);
+            } catch {
+              setDocContent('# 加载失败\n\n无法加载项目文档。');
+            }
+          }
+        }}
+      >
+        📖 项目文档
+      </button>
+
+      {/* 项目文档弹窗（左侧目录 + 右侧内容） */}
+      {docOpen && (() => {
+        // 从 markdown 内容提取标题生成目录
+        const tocItems = docContent.split('\n')
+          .filter(line => /^#{1,3}\s/.test(line.trim()))
+          .map(line => {
+            const match = line.trim().match(/^(#{1,3})\s+(.+)$/);
+            if (!match) return null;
+            const level = match[1].length;
+            const title = match[2];
+            const id = title.replace(/[\s.·]+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '').toLowerCase();
+            return { level, title, id };
+          })
+          .filter(Boolean) as { level: number; title: string; id: string }[];
+
+        // 为内容中的标题添加 id 锚点
+        const htmlWithIds = renderMarkdown(docContent)
+          .replace(/<h([234])[^>]*>(.*?)<\/h\1>/g, (_match, tag, text) => {
+            const cleanText = text.replace(/<[^>]+>/g, '');
+            const id = cleanText.replace(/[\s.·]+/g, '-').replace(/[^\w\u4e00-\u9fff-]/g, '').toLowerCase();
+            return `<h${tag} id="${id}" style="color:var(--amber-400);margin:1rem 0 0.5rem;scroll-margin-top:1rem">${text}</h${tag}>`;
+          });
+
+        return (
+          <div className="doc-overlay" onClick={() => setDocOpen(false)}>
+            <div className="doc-modal" onClick={e => e.stopPropagation()}>
+              <button className="doc-close" onClick={() => setDocOpen(false)}>×</button>
+              {/* 左侧目录 */}
+              <nav className="doc-sidebar">
+                <div className="doc-sidebar-title">📖 目录</div>
+                {tocItems.map((item, i) => (
+                  <a
+                    key={i}
+                    className={`doc-toc-item level-${item.level}`}
+                    href={`#${item.id}`}
+                    onClick={e => {
+                      e.preventDefault();
+                      document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                  >
+                    {item.title}
+                  </a>
+                ))}
+              </nav>
+              {/* 右侧内容 */}
+              <div
+                className="doc-body"
+                dangerouslySetInnerHTML={{ __html: htmlWithIds }}
+              />
+            </div>
+          </div>
+        );
+      })()}
+
       <header className="tavern-header">
         <img
           src="/images/liukanshan-bartender.png"
