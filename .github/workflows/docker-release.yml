@@ -24,8 +24,19 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+            {
+              echo "tags<<EOF"
+              echo "${{ env.IMAGE_NAME }}:${{ github.event.release.tag_name }}"
+              echo "${{ env.IMAGE_NAME }}:latest"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           else
             echo "tag=manual-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            {
+              echo "tags<<EOF"
+              echo "${{ env.IMAGE_NAME }}:manual-${GITHUB_SHA::7}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
           fi
 
       - name: Set up QEMU
@@ -48,9 +59,7 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.tag }}
-            ${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.vars.outputs.tags }}
 
   release-assets:
     if: github.event_name == 'release'
