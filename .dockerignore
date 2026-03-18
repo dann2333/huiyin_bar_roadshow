@@ -10,8 +10,7 @@ dhuiyin_barfrontend/dist
 *.log
 *.md
 *.mp3
-!frontend/public/*.md
-!frontend/public/audio/*.mp3
+!frontend/public/**
 酒馆小曲.mp3
 刘看山 IP 形象3D+平面
 image
