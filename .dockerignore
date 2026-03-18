@@ -10,6 +10,7 @@ dhuiyin_barfrontend/dist
 *.log
 *.md
 *.mp3
+# frontend 构建依赖 public 下的静态资源（音频/文档/图片）
 !frontend/public/**
 酒馆小曲.mp3
 刘看山 IP 形象3D+平面
