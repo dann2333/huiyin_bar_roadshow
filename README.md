@@ -314,6 +314,37 @@ server {
 - 优先选择 **时间跨度最大** 且内容最丰富的大牛
 - 最少要求 **2 年时间跨度**，不足时使用综合搜索结果降级
 
+## 🐳 Docker 部署与发布
+
+项目已提供 GitHub Actions 工作流：`.github/workflows/docker-release.yml`。
+
+- 在 **Release 发布** 时会自动构建并推送多架构镜像（`linux/amd64`、`linux/arm64`）到 GHCR：
+  - `ghcr.io/<owner>/<repo>:<tag>`
+  - `ghcr.io/<owner>/<repo>:latest`
+- 同时会把每个架构的 Docker 镜像 tar 包上传到该 Release 的 Assets 区域：
+  - `huiyin-bar-<tag>-amd64.tar`
+  - `huiyin-bar-<tag>-arm64.tar`
+
+### 1. 直接拉取多架构镜像（推荐）
+
+```bash
+docker pull ghcr.io/<owner>/<repo>:<tag>
+docker run --rm -p 8000:8000 --env-file .env ghcr.io/<owner>/<repo>:<tag>
+```
+
+### 2. 使用 Release Assets 中的镜像包
+
+```bash
+# 选择你的架构 tar 包下载后执行
+docker load -i huiyin-bar-<tag>-amd64.tar
+docker run --rm -p 8000:8000 --env-file .env huiyin-bar:<tag>-amd64
+```
+
+### 3. 手动触发构建
+
+在 GitHub Actions 页面手动触发 **Docker Release** 工作流（`workflow_dispatch`）时，
+会构建并推送多架构镜像到 GHCR，tag 形如 `manual-<sha7>`。
+
 ## 📄 License
 
 [AGPL-3.0](LICENSE)

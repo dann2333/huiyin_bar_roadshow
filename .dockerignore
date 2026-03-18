@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+venv
+node_modules
+frontend/node_modules
+dhuiyin_barfrontend/node_modules
+frontend/dist
+dhuiyin_barfrontend/dist
+*.log
+*.md
+*.mp3
+酒馆小曲.mp3
+刘看山 IP 形象3D+平面
+image
+dhuiyin_barfrontend
