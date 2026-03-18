@@ -12,6 +12,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 
 from app.client.secondme import SecondMeClient
+from app.config import FRONTEND_URL
 from app.utils.safe_json import load_json, update_json
 
 logger = logging.getLogger(__name__)
@@ -96,11 +97,11 @@ async def oauth_callback(code: str, state: str = "") -> RedirectResponse:
     # NOTE: 验证 state 防止 CSRF 攻击
     if not _validate_state(state):
         logger.warning("OAuth2 回调 CSRF 验证失败: state=%s", state)
-        return RedirectResponse(url="http://localhost:5173/?auth=csrf_error")
+        return RedirectResponse(url=f"{FRONTEND_URL}/?auth=csrf_error")
 
     token_resp = await _secondme.exchange_token(code)
     if not token_resp:
-        return RedirectResponse(url="http://localhost:5173/?auth=failed")
+        return RedirectResponse(url=f"{FRONTEND_URL}/?auth=failed")
 
     session_key = token_resp.access_token[:16] if token_resp.access_token else "default"
 
@@ -117,7 +118,7 @@ async def oauth_callback(code: str, state: str = "") -> RedirectResponse:
     logger.info("OAuth2 授权成功（回调模式）, session_key: %s", session_key)
 
     return RedirectResponse(
-        url=f"http://localhost:5173/?auth=success&session={session_key}"
+        url=f"{FRONTEND_URL}/?auth=success&session={session_key}"
     )
 
 

@@ -111,8 +111,8 @@ huiyin_bar/
 │   │   ├── schema/              # Pydantic 数据模型
 │   │   ├── utils/               # 工具模块
 │   │   │   └── safe_json.py     # 线程安全 JSON 读写（per-file 锁 + 原子写入）
-│   │   ├── config.py            # 配置管理（运行时更新 + 脱敏 + 语言设置）
-│   │   └── main.py              # FastAPI 入口
+│   │   ├── config.py            # 配置管理（FRONTEND_URL / 运行时更新 / 脱敏）
+│   │   └── main.py              # FastAPI 入口（整合前端 dist + SPA catch-all）
 │   └── requirements.txt
 ├── frontend/
 │   ├── public/
@@ -138,7 +138,8 @@ huiyin_bar/
 │           └── index.ts         # TypeScript 类型定义
 ├── .env                         # 环境变量（不入库）
 ├── .env.example                 # 环境变量模板
-└── .gitignore
+├── .gitignore
+└── deploy.sh                    # 一键部署脚本
 ```
 
 ## 🚀 快速开始
@@ -165,7 +166,10 @@ SECONDME_CLIENT_ID=your_client_id
 SECONDME_CLIENT_SECRET=your_client_secret
 SECONDME_REDIRECT_URI=http://localhost:5173/auth/callback
 
-# 通义千问（Qwen）— 可选，配置后可作为「定制模型」使用
+# 前端 URL（部署时改为实际域名）
+FRONTEND_URL=http://localhost:5173
+
+# 通义千问（Qwen）— 可选
 QWEN_API_KEY=your_qwen_api_key
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 QWEN_MODEL=qwen-plus
@@ -187,13 +191,15 @@ pip install -r requirements.txt
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### 3. 启动前端
+### 3. 启动前端（开发模式）
 
 ```bash
 cd frontend
 npm install
 npx vite --port 5173 --host 0.0.0.0
 ```
+
+> 开发时前后端分开运行，前端通过 `VITE_API_BASE=http://localhost:8000` 指向后端。
 
 ### 4. 使用
 
@@ -205,6 +211,54 @@ npx vite --port 5173 --host 0.0.0.0
 6. 触发 **🦋 蝴蝶效应** 探索平行人生
 7. 点击 **📜 生成箴言** 获取今夜精华
 8. 点击 **📤 分享到知乎** 将箴言发布到知乎圈子
+
+## 🌐 服务器部署
+
+项目支持前后端整合部署，FastAPI 同时 serve 前端静态文件和 API，只需一个进程。
+
+### 1. 构建前端
+
+```bash
+cd frontend && npm install && npm run build
+```
+
+### 2. 配置 `.env`
+
+```env
+SECONDME_REDIRECT_URI=https://www.huiyinbar.com/api/auth/callback
+FRONTEND_URL=https://www.huiyinbar.com
+```
+
+### 3. 启动服务
+
+```bash
+cd backend
+source venv/bin/activate
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### 4. Nginx 反代（HTTPS）
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name www.huiyinbar.com;
+
+    ssl_certificate     /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # SSE 流式传输需要关闭缓冲
+        proxy_buffering off;
+        proxy_cache off;
+    }
+}
+```
 
 ## ⚙️ 设置面板
 

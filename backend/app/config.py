@@ -67,6 +67,10 @@ class SecondMeConfig:
     AUTH_URL: str = "https://go.second.me/oauth/"
 
 
+# NOTE: 前端 URL 配置，部署时设为实际域名，开发时默认 localhost
+FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+
+
 class QwenConfig:
     """通义千问（Qwen）API 配置"""
     API_KEY: str = os.getenv("QWEN_API_KEY", "")

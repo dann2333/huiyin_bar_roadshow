@@ -6,7 +6,8 @@ import type { Lang } from './i18n';
 import type { TavernEvent, TavernState } from './types';
 import './index.css';
 
-const API_BASE = 'http://localhost:8000';
+// NOTE: 开发时指向后端 dev server，生产时同源请求（前后端整合部署）
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 /**
  * 播放一次性音效（不影响背景音乐）
