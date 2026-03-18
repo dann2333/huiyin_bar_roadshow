@@ -189,17 +189,19 @@ async def refresh_token(request: Request) -> JSONResponse:
 
 @router.post("/api/auth/logout")
 async def logout(request: Request) -> JSONResponse:
-    """退出登录：清除 Token 存储"""
+    """退出登录：仅清除当前用户的 Token"""
     body = await request.json()
     session_key = body.get("session_key", "")
 
+    if not session_key:
+        return JSONResponse({"error": "缺少 session_key"}, status_code=400)
+
     def updater(store: dict) -> dict:
-        if session_key and session_key in store:
+        if session_key in store:
             del store[session_key]
             logger.info("用户退出登录, session_key: %s", session_key)
         else:
-            store.clear()
-            logger.info("清除全部 Token 存储")
+            logger.warning("退出登录时未找到 session: %s", session_key)
         return store
 
     update_json(TOKEN_FILE, updater)
