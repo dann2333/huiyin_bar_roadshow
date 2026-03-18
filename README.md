@@ -316,7 +316,9 @@ server {
 
 ## 🐳 Docker 部署与发布
 
-项目已提供 GitHub Actions 工作流：`.github/workflows/docker-release.yml`。
+项目已提供 GitHub Actions 工作流：`.github/workflows/docker-build.yaml`。
+
+根目录 `Dockerfile` 使用多阶段构建：先打包 frontend（Vite），再打包 backend（FastAPI），最终产物为单一镜像（同时包含前端静态资源与后端 API）。
 
 - 在 **Release 发布** 时会自动构建并推送多架构镜像（`linux/amd64`、`linux/arm64`）到 GHCR：
   - `ghcr.io/<owner>/<repo>:<tag>`
@@ -332,7 +334,14 @@ docker pull ghcr.io/<owner>/<repo>:<tag>
 docker run --rm -p 8000:8000 --env-file .env ghcr.io/<owner>/<repo>:<tag>
 ```
 
-### 2. 使用 Release Assets 中的镜像包
+### 2. 本地构建单镜像
+
+```bash
+docker build -t huiyin-bar:local .
+docker run --rm -p 8000:8000 --env-file .env huiyin-bar:local
+```
+
+### 3. 使用 Release Assets 中的镜像包
 
 ```bash
 # 选择你的架构 tar 包下载后执行
@@ -340,7 +349,7 @@ docker load -i huiyin-bar-<tag>-amd64.tar
 docker run --rm -p 8000:8000 --env-file .env huiyin-bar:<tag>-amd64
 ```
 
-### 3. 手动触发构建
+### 4. 手动触发构建
 
 在 GitHub Actions 页面手动触发 **Docker Release** 工作流（`workflow_dispatch`）时，
 会构建并推送多架构镜像到 GHCR，tag 形如 `manual-<sha7>`。
