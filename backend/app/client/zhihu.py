@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import re
 import time
 import uuid
 from typing import Any
@@ -13,7 +14,7 @@ from typing import Any
 import httpx
 
 from app.config import ZhihuConfig
-from app.schema.models import ZhihuSearchResult, ZhihuBillboardItem
+from app.schema.models import ZhihuSearchResult, ZhihuBillboardItem, RingContentItem
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +142,70 @@ class ZhihuClient:
             headers=self._build_headers(),
         )
         return resp.json()
+
+    async def get_ring_hot_list(
+        self, ring_id: str, page_size: int = 20
+    ) -> list[RingContentItem]:
+        """
+        获取圈子帖子热度榜
+        只保留回音酒馆发布的帖子，按互动热度排序
+        NOTE: 热度公式 = like * 3 + comment * 2 + share，可根据业务调整权重
+        """
+        data = await self.get_ring_detail(
+            ring_id=ring_id, page_num=1, page_size=page_size
+        )
+        contents = data.get("data", {}).get("contents", [])
+        items: list[RingContentItem] = []
+
+        for pin in contents:
+            content_text: str = pin.get("content", "")
+            # NOTE: 只保留包含回音酒馆标签的帖子
+            if "\u56de\u97f3\u9152\u9986" not in content_text:
+                continue
+
+            # 从帖子内容中提取用户的问题
+            question = self._extract_question(content_text)
+            if not question:
+                continue
+
+            pin_id = pin.get("pin_id", 0)
+            like_num = pin.get("like_num", 0)
+            comment_num = pin.get("comment_num", 0)
+            share_num = pin.get("share_num", 0)
+            heat = like_num * 3 + comment_num * 2 + share_num
+
+            items.append(RingContentItem(
+                pin_id=pin_id,
+                question=question,
+                like_num=like_num,
+                comment_num=comment_num,
+                share_num=share_num,
+                heat_score=heat,
+                publish_time=pin.get("publish_time", 0),
+                url=f"https://www.zhihu.com/pin/{pin_id}",
+            ))
+
+        # 按热度降序排列
+        items.sort(key=lambda x: x.heat_score, reverse=True)
+        return items
+
+    @staticmethod
+    def _extract_question(content: str) -> str:
+        """
+        从回音酒馆帖子内容中提取用户的问题
+        帖子格式示例：「用户的问题」
+        """
+        # 先去除 HTML 标签
+        clean = re.sub(r'<[^>]+>', '', content)
+        # 匹配「」内的内容
+        match = re.search(r'「(.+?)」', clean)
+        if match:
+            return match.group(1).strip()
+        # 降级：尝试匹配"今晚的话题"后面的文本
+        match = re.search(r'今晚的话题[\s\n]*(.+?)(?:\n|━|$)', clean)
+        if match:
+            return match.group(1).strip()
+        return ""
 
     async def publish_pin(
         self, ring_id: str, title: str, content: str, image_urls: list[str] | None = None

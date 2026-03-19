@@ -9,6 +9,18 @@ import './index.css';
 // NOTE: 开发时指向后端 dev server，生产时同源请求（前后端整合部署）
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
+/** 热度榜条目类型 */
+interface HotItem {
+  pin_id: number;
+  question: string;
+  like_num: number;
+  comment_num: number;
+  share_num: number;
+  heat_score: number;
+  publish_time: number;
+  url: string;
+}
+
 /**
  * 播放一次性音效（不影响背景音乐）
  * @param src 音频文件路径
@@ -163,6 +175,10 @@ function App() {
   // NOTE: 蝴蝶效应弹窗
   const [butterflyOpen, setButterflyOpen] = useState(false);
   const [butterflyInput, setButterflyInput] = useState('');
+  // NOTE: 热度榜状态
+  const [hotList, setHotList] = useState<HotItem[]>([]);
+  const [hotLoading, setHotLoading] = useState(false);
+  const [hotSidebarOpen, setHotSidebarOpen] = useState(true);
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 背景音乐控制
@@ -233,6 +249,25 @@ function App() {
       .then(data => setEngine(data.current || 'secondme'))
       .catch(() => setEngine('secondme'));
   }, []);
+
+  /** 加载热度榜数据 */
+  const fetchHotList = useCallback(async () => {
+    setHotLoading(true);
+    try {
+      const resp = await fetch(`${API_BASE}/api/social/ring-hot?page_size=20`);
+      const data = await resp.json();
+      setHotList(data.items || []);
+    } catch (err) {
+      console.error('加载热度榜失败:', err);
+    } finally {
+      setHotLoading(false);
+    }
+  }, []);
+
+  // 初始化：页面加载时获取热度榜
+  useEffect(() => {
+    fetchHotList();
+  }, [fetchHotList]);
 
   // 自动滚动到最新对话
   useEffect(() => {
@@ -576,6 +611,55 @@ function App() {
 
   return (
     <div className="tavern">
+      {/* 左侧热度榜侧栏 */}
+      <div className={`hot-sidebar ${hotSidebarOpen ? 'open' : ''}`}>
+        <button
+          className="hot-sidebar-toggle"
+          onClick={() => setHotSidebarOpen(prev => !prev)}
+          title={t('hotTitle')}
+        >
+          🔥
+        </button>
+        <div className="hot-sidebar-content">
+          <div className="hot-sidebar-header">
+            <h3 className="hot-sidebar-title">{t('hotTitle')}</h3>
+            <button
+              className="hot-refresh-btn"
+              onClick={fetchHotList}
+              disabled={hotLoading}
+              title={t('hotRefresh')}
+            >
+              {hotLoading ? '⏳' : '🔄'}
+            </button>
+          </div>
+          <div className="hot-list">
+            {hotLoading && hotList.length === 0 && (
+              <div className="hot-empty">{t('hotLoading')}</div>
+            )}
+            {!hotLoading && hotList.length === 0 && (
+              <div className="hot-empty">{t('hotEmpty')}</div>
+            )}
+            {hotList.map((item, index) => (
+              <a
+                key={item.pin_id}
+                className="hot-item"
+                href={item.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={item.question}
+              >
+                <span className={`hot-rank ${index < 3 ? 'top' : ''}`}>
+                  {index + 1}
+                </span>
+                <span className="hot-question">{item.question}</span>
+                <span className="hot-score">
+                  {item.heat_score > 0 ? item.heat_score : '-'}
+                </span>
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
       {/* 右下角音乐控制按钮 */}
       <div className={`music-control ${musicPanelOpen ? 'open' : ''}`}>
         <button

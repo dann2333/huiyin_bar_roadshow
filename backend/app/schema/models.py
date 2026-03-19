@@ -30,6 +30,18 @@ class ZhihuBillboardItem(BaseModel):
     heat_score: int = 0
 
 
+class RingContentItem(BaseModel):
+    """知乎圈子内容条目（热度榜用）"""
+    pin_id: int = 0
+    question: str = ""       # 从帖子内容中提取的用户问题
+    like_num: int = 0
+    comment_num: int = 0
+    share_num: int = 0
+    heat_score: int = 0      # 计算后的热度分数
+    publish_time: int = 0
+    url: str = ""             # 跳转到知乎的链接
+
+
 # ============ SecondMe 相关模型 ============
 
 class TokenResponse(BaseModel):
