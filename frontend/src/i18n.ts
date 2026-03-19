@@ -100,6 +100,13 @@ const translations = {
     // 文档
     guideTrigger: '❓ 玩法指南',
     docLoadFail: '# 加载失败\n\n无法加载项目文档。',
+
+    // 热度榜
+    hotTitle: '🔥 酒局热度榜',
+    hotRefresh: '刷新榜单',
+    hotEmpty: '暂无分享记录',
+    hotHeat: '热度',
+    hotLoading: '加载中...',
   },
   en: {
     loadingText: 'Checking the guest registry...',
@@ -184,6 +191,13 @@ const translations = {
 
     guideTrigger: '❓ Guide',
     docLoadFail: '# Load Failed\n\nUnable to load documentation.',
+
+    // Hot List
+    hotTitle: '🔥 Tavern Hot List',
+    hotRefresh: 'Refresh',
+    hotEmpty: 'No shared posts yet',
+    hotHeat: 'Heat',
+    hotLoading: 'Loading...',
   },
 } as const;
 

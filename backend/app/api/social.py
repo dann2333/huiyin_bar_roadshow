@@ -170,3 +170,19 @@ async def get_billboard(
         "items": [item.model_dump() for item in items],
     })
 
+
+@router.get("/api/social/ring-hot")
+async def get_ring_hot_list(
+    page_size: int = Query(default=20, le=50),
+) -> JSONResponse:
+    """
+    获取酒局热度榜
+    统计通过回音酒馆分享到知乎圈子的帖子，按互动热度排序
+    """
+    items = await _zhihu.get_ring_hot_list(
+        ring_id=SHARE_RING_ID, page_size=page_size
+    )
+    return JSONResponse({
+        "items": [item.model_dump() for item in items],
+    })
+
