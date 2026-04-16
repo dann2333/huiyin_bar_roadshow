@@ -213,12 +213,12 @@ function App() {
   // NOTE: 热度榜状态
   const [hotList, setHotList] = useState<HotItem[]>([]);
   const [hotLoading, setHotLoading] = useState(false);
-  const [hotSidebarOpen, setHotSidebarOpen] = useState(true);
+  const [hotSidebarOpen, setHotSidebarOpen] = useState(() => window.innerWidth > 640);
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 背景音乐控制
   const { isPlaying, volume, togglePlay, setVolume, play: playMusic } = useBackgroundMusic('/audio/酒馆小曲.mp3');
-  const [musicPanelOpen, setMusicPanelOpen] = useState(true);
+  const [musicPanelOpen, setMusicPanelOpen] = useState(() => window.innerWidth > 640);
   // NOTE: 跟踪是否已在首次提问时自动播放音乐
   const musicAutoTriggeredRef = useRef(false);
   // NOTE: 使用 ref 确保回调中始终能拿到最新的 sessionKey
@@ -245,6 +245,24 @@ function App() {
     return () => {
       window.removeEventListener('resize', updateSafeAreaVars);
       window.removeEventListener('orientationchange', updateSafeAreaVars);
+    };
+  }, []);
+
+  useEffect(() => {
+    const collapseFloatingPanelsOnMobile = () => {
+      if (window.innerWidth <= 640) {
+        setHotSidebarOpen(false);
+        setMusicPanelOpen(false);
+      }
+    };
+
+    collapseFloatingPanelsOnMobile();
+    window.addEventListener('resize', collapseFloatingPanelsOnMobile);
+    window.addEventListener('orientationchange', collapseFloatingPanelsOnMobile);
+
+    return () => {
+      window.removeEventListener('resize', collapseFloatingPanelsOnMobile);
+      window.removeEventListener('orientationchange', collapseFloatingPanelsOnMobile);
     };
   }, []);
 
@@ -1129,11 +1147,11 @@ function App() {
       </header>
 
       {authStatus === 'none' && (
-        <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-          <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+        <div className="auth-card">
+          <p className="auth-card-text">
             {t('authPrompt')}
           </p>
-          <button className="send-btn" onClick={handleLogin}>{t('authLogin')}</button>
+          <button className="send-btn auth-card-btn" onClick={handleLogin}>{t('authLogin')}</button>
         </div>
       )}
 
