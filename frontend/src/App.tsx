@@ -234,8 +234,8 @@ function App() {
         ? Math.max(bridge.SAFE_AREA_BOTTOM, 0)
         : 0;
 
-      document.documentElement.style.setProperty('--safe-area-top-app', `${safeTop}vw`);
-      document.documentElement.style.setProperty('--safe-area-bottom-app', `${safeBottom}vw`);
+      document.documentElement.style.setProperty('--safe-area-top-app', `${safeTop}px`);
+      document.documentElement.style.setProperty('--safe-area-bottom-app', `${safeBottom}px`);
     };
 
     updateSafeAreaVars();
