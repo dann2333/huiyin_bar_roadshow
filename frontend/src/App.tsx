@@ -213,14 +213,15 @@ function App() {
   // NOTE: 热度榜状态
   const [hotList, setHotList] = useState<HotItem[]>([]);
   const [hotLoading, setHotLoading] = useState(false);
-  const [hotSidebarOpen, setHotSidebarOpen] = useState(() => window.innerWidth > 640);
+  const [hotSidebarOpen, setHotSidebarOpen] = useState(false);
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 背景音乐控制
   const { isPlaying, volume, togglePlay, setVolume, play: playMusic } = useBackgroundMusic('/audio/酒馆小曲.mp3');
-  const [musicPanelOpen, setMusicPanelOpen] = useState(() => window.innerWidth > 640);
+  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
   // NOTE: 跟踪是否已在首次提问时自动播放音乐
   const musicAutoTriggeredRef = useRef(false);
+  const floatingPanelsInitializedRef = useRef(false);
   // NOTE: 使用 ref 确保回调中始终能拿到最新的 sessionKey
   const sessionKeyRef = useRef(getStoredSessionKey());
 
@@ -249,20 +250,29 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const collapseFloatingPanelsOnMobile = () => {
-      if (window.innerWidth <= 640) {
+    const syncFloatingPanels = () => {
+      const isMobile = window.innerWidth <= 640;
+
+      if (!floatingPanelsInitializedRef.current) {
+        setHotSidebarOpen(!isMobile);
+        setMusicPanelOpen(!isMobile);
+        floatingPanelsInitializedRef.current = true;
+        return;
+      }
+
+      if (isMobile) {
         setHotSidebarOpen(false);
         setMusicPanelOpen(false);
       }
     };
 
-    collapseFloatingPanelsOnMobile();
-    window.addEventListener('resize', collapseFloatingPanelsOnMobile);
-    window.addEventListener('orientationchange', collapseFloatingPanelsOnMobile);
+    syncFloatingPanels();
+    window.addEventListener('resize', syncFloatingPanels);
+    window.addEventListener('orientationchange', syncFloatingPanels);
 
     return () => {
-      window.removeEventListener('resize', collapseFloatingPanelsOnMobile);
-      window.removeEventListener('orientationchange', collapseFloatingPanelsOnMobile);
+      window.removeEventListener('resize', syncFloatingPanels);
+      window.removeEventListener('orientationchange', syncFloatingPanels);
     };
   }, []);
 
