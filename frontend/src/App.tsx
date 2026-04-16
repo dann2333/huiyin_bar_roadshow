@@ -21,6 +21,42 @@ interface HotItem {
   url: string;
 }
 
+interface BridgeSafeArea {
+  SAFE_AREA_TOP?: number;
+  SAFE_AREA_BOTTOM?: number;
+}
+
+interface SettingsLlmConfig {
+  base_url: string;
+  api_key: string;
+  model: string;
+  has_config?: boolean;
+}
+
+interface SettingsZhihuConfig {
+  app_key: string;
+  app_secret: string;
+  has_config?: boolean;
+}
+
+interface SettingsData {
+  language: string;
+  llm: SettingsLlmConfig;
+  zhihu: SettingsZhihuConfig;
+}
+
+declare global {
+  interface Window {
+    appBridge?: BridgeSafeArea;
+  }
+}
+
+const INITIAL_SETTINGS_DATA: SettingsData = {
+  language: 'zh',
+  llm: { base_url: '', api_key: '', model: '' },
+  zhihu: { app_key: '', app_secret: '' },
+};
+
 /**
  * 播放一次性音效（不影响背景音乐）
  * @param src 音频文件路径
@@ -165,10 +201,9 @@ function App() {
   const t = getT(lang);
   // NOTE: 设置面板
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsData, setSettingsData] = useState({
-    language: lang as string,
-    llm: { base_url: '', api_key: '', model: '' },
-    zhihu: { app_key: '', app_secret: '' },
+  const [settingsData, setSettingsData] = useState<SettingsData>({
+    ...INITIAL_SETTINGS_DATA,
+    language: lang,
   });
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsMsg, setSettingsMsg] = useState('');
@@ -188,6 +223,30 @@ function App() {
   const musicAutoTriggeredRef = useRef(false);
   // NOTE: 使用 ref 确保回调中始终能拿到最新的 sessionKey
   const sessionKeyRef = useRef(getStoredSessionKey());
+
+  useEffect(() => {
+    const updateSafeAreaVars = () => {
+      const bridge = window.appBridge;
+      const safeTop = typeof bridge?.SAFE_AREA_TOP === 'number' && Number.isFinite(bridge.SAFE_AREA_TOP)
+        ? Math.max(bridge.SAFE_AREA_TOP, 0)
+        : 0;
+      const safeBottom = typeof bridge?.SAFE_AREA_BOTTOM === 'number' && Number.isFinite(bridge.SAFE_AREA_BOTTOM)
+        ? Math.max(bridge.SAFE_AREA_BOTTOM, 0)
+        : 0;
+
+      document.documentElement.style.setProperty('--safe-area-top-app', `${safeTop}px`);
+      document.documentElement.style.setProperty('--safe-area-bottom-app', `${safeBottom}px`);
+    };
+
+    updateSafeAreaVars();
+    window.addEventListener('resize', updateSafeAreaVars);
+    window.addEventListener('orientationchange', updateSafeAreaVars);
+
+    return () => {
+      window.removeEventListener('resize', updateSafeAreaVars);
+      window.removeEventListener('orientationchange', updateSafeAreaVars);
+    };
+  }, []);
 
   // 初始化：处理 OAuth 回调
   useEffect(() => {
@@ -378,7 +437,7 @@ function App() {
       handleEvent,
       () => setState(prev => ({ ...prev, isLoading: false })),
     );
-  }, [input, startStream, handleEvent]);
+  }, [input, startStream, handleEvent, playMusic]);
 
   /** 用户插话 */
   const handleSpeak = useCallback(async () => {
@@ -542,7 +601,7 @@ function App() {
       setShareStatus('cooldown');
       setTimeout(() => setShareStatus('idle'), 3000);
     }
-  }, [receiptText, userConcern, state.sessionId, shareStatus]);
+  }, [receiptText, userConcern, guestName, state.sessionId, shareStatus]);
 
   /** 发起 OAuth 登录 */
   const handleLogin = async () => {
@@ -808,7 +867,7 @@ function App() {
                   ...prev,
                   llm: { ...prev.llm, base_url: e.target.value },
                 }))}
-                placeholder={(settingsData.llm as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+               placeholder={settingsData.llm.has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
               />
               <label className="settings-label">{t('settingsApiKey')}</label>
               <input
@@ -818,7 +877,7 @@ function App() {
                   ...prev,
                   llm: { ...prev.llm, api_key: e.target.value },
                 }))}
-                placeholder={(settingsData.llm as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+                placeholder={settingsData.llm.has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
               />
               <label className="settings-label">{t('settingsModel')}</label>
               <input
@@ -828,7 +887,7 @@ function App() {
                   ...prev,
                   llm: { ...prev.llm, model: e.target.value },
                 }))}
-                placeholder={(settingsData.llm as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+                placeholder={settingsData.llm.has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
               />
             </div>
 
@@ -843,7 +902,7 @@ function App() {
                   ...prev,
                   zhihu: { ...prev.zhihu, app_key: e.target.value },
                 }))}
-                placeholder={(settingsData.zhihu as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+                placeholder={settingsData.zhihu.has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
               />
               <label className="settings-label">{t('settingsAppSecret')}</label>
               <input
@@ -853,7 +912,7 @@ function App() {
                   ...prev,
                   zhihu: { ...prev.zhihu, app_secret: e.target.value },
                 }))}
-                placeholder={(settingsData.zhihu as any).has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
+                placeholder={settingsData.zhihu.has_config ? t('settingsConfigured') : t('settingsNotConfigured')}
               />
             </div>
 
