@@ -214,12 +214,12 @@ function App() {
   // NOTE: 热度榜状态
   const [hotList, setHotList] = useState<HotItem[]>([]);
   const [hotLoading, setHotLoading] = useState(false);
-  const [hotSidebarOpen, setHotSidebarOpen] = useState(false);
+  const [hotSidebarOpen, setHotSidebarOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth > MOBILE_BREAKPOINT);
   const dialogEndRef = useRef<HTMLDivElement>(null);
   const { startStream } = useSSEStream();
   // NOTE: 背景音乐控制
   const { isPlaying, volume, togglePlay, setVolume, play: playMusic } = useBackgroundMusic('/audio/酒馆小曲.mp3');
-  const [musicPanelOpen, setMusicPanelOpen] = useState(false);
+  const [musicPanelOpen, setMusicPanelOpen] = useState(() => typeof window !== 'undefined' && window.innerWidth > MOBILE_BREAKPOINT);
   // NOTE: 跟踪是否已在首次提问时自动播放音乐
   const musicAutoTriggeredRef = useRef(false);
   const floatingPanelsInitializedRef = useRef(false);
