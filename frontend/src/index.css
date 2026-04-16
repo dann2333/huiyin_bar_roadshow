@@ -1233,11 +1233,7 @@ body {
   }
 
   .tavern {
-    padding:
-      0
-      calc(1rem + var(--safe-area-right))
-      calc(2rem + var(--safe-area-bottom))
-      calc(1rem + var(--safe-area-left));
+    padding: 0 calc(1rem + var(--safe-area-right)) calc(2rem + var(--safe-area-bottom)) calc(1rem + var(--safe-area-left));
   }
 
   .tavern-header {

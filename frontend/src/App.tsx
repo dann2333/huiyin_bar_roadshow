@@ -8,6 +8,7 @@ import './index.css';
 
 // NOTE: 开发时指向后端 dev server，生产时同源请求（前后端整合部署）
 const API_BASE = import.meta.env.VITE_API_BASE || '';
+const MOBILE_BREAKPOINT = 640;
 
 /** 热度榜条目类型 */
 interface HotItem {
@@ -251,7 +252,7 @@ function App() {
 
   useEffect(() => {
     const syncFloatingPanels = () => {
-      const isMobile = window.innerWidth <= 640;
+      const isMobile = window.innerWidth <= MOBILE_BREAKPOINT;
 
       if (!floatingPanelsInitializedRef.current) {
         setHotSidebarOpen(!isMobile);
