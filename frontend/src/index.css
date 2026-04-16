@@ -1285,11 +1285,7 @@ body {
   }
 
   .input-area {
-    padding:
-      0.5rem
-      calc(0.75rem + var(--safe-area-right))
-      calc(1rem + var(--safe-area-bottom))
-      calc(0.75rem + var(--safe-area-left));
+    padding: 0.5rem calc(0.75rem + var(--safe-area-right)) calc(1rem + var(--safe-area-bottom)) calc(0.75rem + var(--safe-area-left));
   }
 
   .input-container {
