@@ -1777,3 +1777,14 @@ body {
     display: none;
   }
 }
+
+.print-sheet{display:none}
+@media print {
+  body * { visibility: hidden; }
+  .print-sheet, .print-sheet * { visibility: visible; }
+  .print-sheet {
+    display:block; position:absolute; left:0; top:0; width:100%;
+    padding:24mm; color:#222; background:#fff; font-size:14pt; line-height:1.6;
+  }
+  .print-sheet h2{margin:8mm 0 6mm;color:#111}
+}

@@ -191,6 +191,8 @@ function App() {
   // NOTE: AI 引擎状态
   const [engine, setEngine] = useState<'qwen' | 'secondme'>('secondme');
   const [engineSwitching, setEngineSwitching] = useState(false);
+  const [starterQuestions, setStarterQuestions] = useState<string[]>([]);
+  const printTriggeredRef = useRef(false);
   // NOTE: 产品文档弹窗
   const [docOpen, setDocOpen] = useState(false);
   const [docContent, setDocContent] = useState('');
@@ -277,57 +279,12 @@ function App() {
     };
   }, []);
 
-  // 初始化：处理 OAuth 回调
+  // 路演模式：免登录，直接进入
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const sessionFromUrl = params.get('session');
-
-    // 情况 1：URL 中已有 session key（后端回调重定向）
-    if (sessionFromUrl) {
-      sessionKeyRef.current = sessionFromUrl;
-      storeSessionKey(sessionFromUrl);
-      // NOTE: 强制刷新页面，确保登录后 UI 完全重新初始化
-      window.location.href = '/';
-      return;
-    }
-
-    // 情况 2：URL 中有 code（OAuth 回调，需要转发给后端换取 Token）
-    if (code) {
-      setAuthStatus('checking');
-      // NOTE: 从 sessionStorage 取出 state，与 code 一起发送给后端验证 CSRF
-      const storedState = sessionStorage.getItem('oauth_state') || '';
-      sessionStorage.removeItem('oauth_state');
-      fetch(`${API_BASE}/api/auth/exchange`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, state: storedState }),
-      })
-        .then(resp => resp.json())
-        .then(data => {
-          if (data.session_key) {
-            sessionKeyRef.current = data.session_key;
-            storeSessionKey(data.session_key);
-            // NOTE: 强制刷新页面，确保登录后 UI 完全重新初始化
-            window.location.href = '/';
-          } else {
-            console.error('换取 Token 失败:', data);
-            setAuthStatus('none');
-          }
-        })
-        .catch(err => {
-          console.error('OAuth 交换异常:', err);
-          setAuthStatus('none');
-        });
-      return;
-    }
-
-    // 情况 3：无 OAuth 参数，检查 localStorage 中是否有已存的 session
-    if (getStoredSessionKey()) {
-      setAuthStatus('success');
-    } else {
-      setAuthStatus('none');
-    }
+    const roadshowSession = getStoredSessionKey() || 'roadshow';
+    sessionKeyRef.current = roadshowSession;
+    storeSessionKey(roadshowSession);
+    setAuthStatus('success');
   }, []);
 
   // 初始化：查询当前 AI 引擎
@@ -336,6 +293,13 @@ function App() {
       .then(r => r.json())
       .then(data => setEngine(data.current || 'secondme'))
       .catch(() => setEngine('secondme'));
+  }, []);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/tavern/starter-questions?session_key=${sessionKeyRef.current}`)
+      .then(r => r.json())
+      .then(data => setStarterQuestions(Array.isArray(data.questions) ? data.questions : []))
+      .catch(() => setStarterQuestions([]));
   }, []);
 
   /** 加载热度榜数据 */
@@ -361,6 +325,13 @@ function App() {
   useEffect(() => {
     dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.dialogs]);
+
+  useEffect(() => {
+    if (receiptText && !printTriggeredRef.current) {
+      printTriggeredRef.current = true;
+      setTimeout(() => window.print(), 600);
+    }
+  }, [receiptText]);
 
   /** 处理 SSE 事件 → 追加到对话流 */
   const handleEvent = useCallback((event: TavernEvent) => {
@@ -631,21 +602,6 @@ function App() {
       setTimeout(() => setShareStatus('idle'), 3000);
     }
   }, [receiptText, userConcern, guestName, state.sessionId, shareStatus]);
-
-  /** 发起 OAuth 登录 */
-  const handleLogin = async () => {
-    // NOTE: 先从后端获取随机 state 存入 sessionStorage，防止 CSRF 攻击
-    try {
-      const resp = await fetch(`${API_BASE}/api/auth/state`);
-      const data = await resp.json();
-      if (data.state) {
-        sessionStorage.setItem('oauth_state', data.state);
-      }
-    } catch (err) {
-      console.error('获取 OAuth state 失败:', err);
-    }
-    window.location.href = `${API_BASE}/api/auth/login`;
-  };
 
   const handleSubmit = started ? handleSpeak : handleStart;
 
@@ -1157,15 +1113,6 @@ function App() {
         )}
       </header>
 
-      {authStatus === 'none' && (
-        <div className="auth-card">
-          <p className="auth-card-text">
-            {t('authPrompt')}
-          </p>
-          <button className="send-btn auth-card-btn" onClick={handleLogin}>{t('authLogin')}</button>
-        </div>
-      )}
-
       {started && (
         <div className="stage-indicator">
           {[1, 2, 3, 4, 5].map(s => (
@@ -1176,10 +1123,24 @@ function App() {
 
       <div className="dialog-stream">
         {!started && authStatus === 'success' && (
-          <div className="dialog-entry bartender">
-            <div className="dialog-speaker">{t('bartenderName')}</div>
-            <div className="dialog-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(t('bartenderWelcome')) }} />
-          </div>
+          <>
+            <div className="dialog-entry bartender">
+              <div className="dialog-speaker">{t('bartenderName')}</div>
+              <div className="dialog-content" dangerouslySetInnerHTML={{ __html: renderMarkdown(t('bartenderWelcome')) }} />
+            </div>
+            {starterQuestions.length > 0 && (
+              <div className="dialog-entry bartender">
+                <div className="dialog-speaker">✨ 开场 5 问（自动生成）</div>
+                <div className="dialog-content">
+                  {starterQuestions.map((q, i) => (
+                    <div key={`${q}-${i}`} style={{ marginBottom: 8, cursor: 'pointer' }} onClick={() => setInput(q)}>
+                      {i + 1}. {q}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {state.dialogs.map(entry => (
@@ -1249,6 +1210,7 @@ function App() {
                 <>
                   <button className="action-btn butterfly" onClick={() => { setButterflyInput(''); setButterflyOpen(true); }}>{t('butterfly')}</button>
                   <button className="action-btn" onClick={handleReceipt}>{t('receipt')}</button>
+                  {receiptText && <button className="action-btn" onClick={() => window.print()}>🖨️ 打印简言/谏言</button>}
                   {receiptText && (
                     <button
                       className={`action-btn share-zhihu ${shareStatus}`}
@@ -1321,6 +1283,14 @@ function App() {
       )}
 
       {/* 玩法指南弹窗 */}
+      {receiptText && (
+        <section className="print-sheet">
+          <img src="/favicon.svg" alt="logo" style={{ width: 84 }} />
+          <h2>简言 · 谏言</h2>
+          <div style={{ whiteSpace: 'pre-wrap' }}>{receiptText}</div>
+          <img src="/icons.svg" alt="logo" style={{ width: 120, marginTop: 16 }} />
+        </section>
+      )}
       {guideOpen && (
         <div className="doc-overlay" onClick={() => setGuideOpen(false)}>
           <div

@@ -46,7 +46,11 @@ async def _get_orchestrator(session_key: str) -> TavernOrchestrator | None:
     NOTE: 每次调用都会检查 Token 是否需要刷新，确保编排器持有最新 Token
     """
     access_token = await get_access_token(session_key)
-    if not access_token:
+    pref = _engine_prefs.get(session_key, "qwen" if QwenConfig.API_KEY else "secondme")
+    # 路演模式：若未登录 SecondMe 但 Qwen 可用，允许免登录启动
+    if not access_token and pref == "qwen" and QwenConfig.API_KEY:
+        access_token = ""
+    if access_token is None and pref != "qwen":
         return None
 
     if session_key in _orchestrators:
@@ -54,7 +58,6 @@ async def _get_orchestrator(session_key: str) -> TavernOrchestrator | None:
         return _orchestrators[session_key]
 
     # NOTE: 根据用户的引擎偏好决定是否启用 Qwen
-    pref = _engine_prefs.get(session_key, "qwen" if QwenConfig.API_KEY else "secondme")
     qwen = _create_qwen_for_user() if pref == "qwen" else None
 
     orch = TavernOrchestrator(
@@ -67,6 +70,27 @@ async def _get_orchestrator(session_key: str) -> TavernOrchestrator | None:
     if qwen:
         logger.info("编排器已创建 (Qwen 引擎): session_key=%s", session_key)
     return orch
+
+
+@router.get("/api/tavern/starter-questions")
+async def get_starter_questions(session_key: str = Query(default="roadshow")) -> JSONResponse:
+    """生成开场 5 个问题建议（路演版）"""
+    orch = await _get_orchestrator(session_key)
+    if not orch:
+        return JSONResponse({"questions": []}, status_code=200)
+
+    prompt = (
+        "你是酒馆酒保。请只输出5条简短的人生困惑问题，每条一行，"
+        "每条不超过18个中文字符，不要编号，不要解释。"
+    )
+    text = await orch._ask_ai(
+        role_prompt="你是一个善于倾听的中文酒保。",
+        message=prompt,
+        history=[],
+        speaker_name="酒保刘看山",
+    )
+    lines = [x.strip("•- 0123456789.、") for x in text.splitlines() if x.strip()]
+    return JSONResponse({"questions": lines[:5]})
 
 
 @router.post("/api/tavern/start")
