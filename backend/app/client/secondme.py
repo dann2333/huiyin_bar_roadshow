@@ -5,6 +5,7 @@ SecondMe API 客户端
 import json
 import logging
 import secrets
+import time
 from collections.abc import AsyncIterator
 
 import httpx
@@ -28,6 +29,8 @@ class SecondMeClient:
         self.base_url = SecondMeConfig.BASE_URL
         self.auth_url = SecondMeConfig.AUTH_URL
         self._http = httpx.AsyncClient(timeout=60.0)
+        self._app_token: str = ""
+        self._app_token_expires_at: float = 0
 
     # ============ OAuth2 流程 ============
 
@@ -107,6 +110,49 @@ class SecondMeClient:
             )
         except Exception:
             logger.exception("刷新 Token 异常")
+            return None
+
+    async def get_app_access_token(self, scope: str = "chat.write") -> str | None:
+        """
+        获取 app-level token，供路演匿名模式调用 SecondMe LLM。
+        client_credentials token 有效期较长，内存缓存并提前 5 分钟刷新。
+        """
+        now = time.time()
+        if self._app_token and now < self._app_token_expires_at - 300:
+            return self._app_token
+
+        if not self.client_id or not self.client_secret:
+            logger.warning("SecondMe client credentials 未配置，无法获取 app token")
+            return None
+
+        try:
+            resp = await self._http.post(
+                f"{self.base_url}/api/oauth/token/client",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "scope": scope,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            data = resp.json()
+            if data.get("code") != 0:
+                logger.error("获取 SecondMe app token 失败: %s", data)
+                return None
+
+            token_data = data.get("data", {})
+            access_token = token_data.get("accessToken", "")
+            expires_in = int(token_data.get("expiresIn", 604800))
+            if not access_token:
+                logger.error("SecondMe app token 响应缺少 accessToken: %s", data)
+                return None
+
+            self._app_token = access_token
+            self._app_token_expires_at = now + expires_in
+            return access_token
+        except Exception:
+            logger.exception("获取 SecondMe app token 异常")
             return None
 
     # ============ AI 对话引擎 ============

@@ -1778,13 +1778,178 @@ body {
   }
 }
 
-.print-sheet{display:none}
+.print-sheet {
+  display: none;
+}
+
+@page {
+  size: 86mm 102mm;
+  margin: 0;
+}
+
 @media print {
-  body * { visibility: hidden; }
-  .print-sheet, .print-sheet * { visibility: visible; }
-  .print-sheet {
-    display:block; position:absolute; left:0; top:0; width:100%;
-    padding:24mm; color:#222; background:#fff; font-size:14pt; line-height:1.6;
+  html,
+  body,
+  #root {
+    width: 86mm;
+    height: 102mm;
+    min-height: auto;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    overflow: hidden !important;
   }
-  .print-sheet h2{margin:8mm 0 6mm;color:#111}
+
+  .tavern {
+    display: block !important;
+    width: 86mm !important;
+    max-width: none !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .tavern > :not(.print-sheet) {
+    display: none !important;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .print-sheet,
+  .print-sheet * {
+    visibility: visible !important;
+  }
+
+  .print-sheet {
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 86mm;
+    height: 102mm;
+    padding: 0;
+    color: #172033;
+    background: #fff;
+    font-family: 'Noto Serif SC', 'Source Han Serif SC', serif;
+    font-size: 8.5pt;
+    line-height: 1.52;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .print-page {
+    width: 86mm;
+    height: 102mm;
+    padding: 4mm;
+    display: flex;
+    flex-direction: column;
+    gap: 2.6mm;
+    overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(0, 102, 255, 0.08), transparent 28mm),
+      #fff;
+  }
+
+  .print-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 3mm;
+    padding-bottom: 2.4mm;
+    border-bottom: 0.35mm solid #0066ff;
+  }
+
+  .print-header-copy {
+    text-align: right;
+  }
+
+  .print-eyebrow {
+    color: #0066ff;
+    font-family: var(--font-sans);
+    font-size: 5pt;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .print-sheet h2 {
+    margin: 0.6mm 0 0;
+    color: #111827;
+    font-size: 13pt;
+    line-height: 1.08;
+    letter-spacing: 0;
+  }
+
+  .print-logo {
+    display: block;
+    object-fit: contain;
+  }
+
+  .print-logo-color {
+    width: 20mm;
+    height: auto;
+  }
+
+  .print-logo-black {
+    width: 15mm;
+    height: auto;
+    opacity: 0.68;
+  }
+
+  .print-concern,
+  .print-advice {
+    break-inside: avoid;
+  }
+
+  .print-section-label {
+    color: #0066ff;
+    font-family: var(--font-sans);
+    font-size: 6pt;
+    font-weight: 700;
+    letter-spacing: 0;
+    margin-bottom: 1mm;
+  }
+
+  .print-concern {
+    padding: 2mm 2.5mm;
+    border-left: 0.8mm solid #ffca28;
+    background: #fff8e1;
+  }
+
+  .print-concern p {
+    margin: 0;
+    color: #1f2937;
+    font-size: 6.8pt;
+    line-height: 1.32;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .print-advice {
+    flex: 1;
+    min-height: 0;
+  }
+
+  .print-receipt-text {
+    white-space: pre-wrap;
+    color: #111827;
+    font-size: 7.5pt;
+    line-height: 1.34;
+    overflow-wrap: anywhere;
+  }
+
+  .print-footer {
+    margin-top: auto;
+    padding-top: 1.8mm;
+    border-top: 0.25mm solid #dbeafe;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: #64748b;
+    font-family: var(--font-sans);
+    font-size: 5.8pt;
+  }
 }

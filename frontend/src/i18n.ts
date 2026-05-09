@@ -25,7 +25,7 @@ const translations = {
     // 标题
     tavernTitle: '回音酒馆',
     tavernSubtitle: 'Echo Tavern · 跨越时空的人生沙盘',
-    connectedSecondMe: '✓ 已连接 SecondMe',
+    connectedSecondMe: '✓ 路演模式',
 
     // 引擎切换
     customModelLabel: '🤖 定制模型',
@@ -115,7 +115,7 @@ const translations = {
     docTrigger: '📖 Docs',
     settingsTrigger: '⚙️ Settings',
     logoutBtn: '🚪 Logout',
-    logoutTip: 'Clear login state and reconnect SecondMe',
+    logoutTip: 'Clear local session state',
     newSessionBtn: '🍺 New Session',
     newSessionTip: 'Start a new tavern session',
 
@@ -125,7 +125,7 @@ const translations = {
 
     tavernTitle: 'Echo Tavern',
     tavernSubtitle: 'A Time-Crossing Life Sandbox',
-    connectedSecondMe: '✓ Connected to SecondMe',
+    connectedSecondMe: '✓ Roadshow Mode',
 
     customModelLabel: '🤖 Custom Model',
     customModelActive: 'Current: Custom Model, click to switch',

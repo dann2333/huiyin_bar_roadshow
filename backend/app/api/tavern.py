@@ -11,7 +11,7 @@ from sse_starlette.sse import EventSourceResponse
 from app.client.secondme import SecondMeClient
 from app.client.zhihu import ZhihuClient
 from app.client.qwen import QwenClient
-from app.config import QwenConfig
+from app.config import QwenConfig, SecondMeConfig
 from app.schema.models import (
     StartRequest, SpeakRequest, ButterflyRequest, ReceiptRequest, AutoModeRequest,
 )
@@ -32,6 +32,14 @@ _orchestrators: dict[str, TavernOrchestrator] = {}
 # 值为 "qwen" 或 "secondme"
 _engine_prefs: dict[str, str] = {}
 
+DEFAULT_STARTER_QUESTIONS = [
+    "我该不该换一条路？",
+    "现在坚持还值得吗？",
+    "我在害怕什么？",
+    "如何面对不确定？",
+    "怎样和过去和解？",
+]
+
 
 def _create_qwen_for_user() -> QwenClient | None:
     """为用户创建独立的 Qwen 客户端实例（如果 API key 可用）"""
@@ -40,17 +48,26 @@ def _create_qwen_for_user() -> QwenClient | None:
     return None
 
 
+def _default_engine() -> str:
+    """路演版本优先使用 SecondMe app-level LLM，其次才是定制模型。"""
+    if SecondMeConfig.CLIENT_ID and SecondMeConfig.CLIENT_SECRET:
+        return "secondme"
+    return "qwen"
+
+
 async def _get_orchestrator(session_key: str) -> TavernOrchestrator | None:
     """
     获取或创建编排器实例
     NOTE: 每次调用都会检查 Token 是否需要刷新，确保编排器持有最新 Token
     """
     access_token = await get_access_token(session_key)
-    pref = _engine_prefs.get(session_key, "qwen" if QwenConfig.API_KEY else "secondme")
-    # 路演模式：若未登录 SecondMe 但 Qwen 可用，允许免登录启动
+    pref = _engine_prefs.get(session_key, _default_engine())
+    if not access_token and pref == "secondme":
+        access_token = await _secondme.get_app_access_token()
+    # 路演模式：若未登录 SecondMe 但定制模型可用，允许免登录启动
     if not access_token and pref == "qwen" and QwenConfig.API_KEY:
         access_token = ""
-    if access_token is None and pref != "qwen":
+    if access_token is None and not (pref == "qwen" and QwenConfig.API_KEY):
         return None
 
     if session_key in _orchestrators:
@@ -77,11 +94,11 @@ async def get_starter_questions(session_key: str = Query(default="roadshow")) ->
     """生成开场 5 个问题建议（路演版）"""
     orch = await _get_orchestrator(session_key)
     if not orch:
-        return JSONResponse({"questions": []}, status_code=200)
+        return JSONResponse({"questions": DEFAULT_STARTER_QUESTIONS}, status_code=200)
 
     prompt = (
-        "你是酒馆酒保。请只输出5条简短的人生困惑问题，每条一行，"
-        "每条不超过18个中文字符，不要编号，不要解释。"
+        "你是路演现场的酒馆酒保。请只输出5条简短的人生困惑问题，每条一行，"
+        "每条不超过18个中文字符，不要编号，不要解释。问题要适合路人一眼点选。"
     )
     text = await orch._ask_ai(
         role_prompt="你是一个善于倾听的中文酒保。",
@@ -89,8 +106,15 @@ async def get_starter_questions(session_key: str = Query(default="roadshow")) ->
         history=[],
         speaker_name="酒保刘看山",
     )
-    lines = [x.strip("•- 0123456789.、") for x in text.splitlines() if x.strip()]
-    return JSONResponse({"questions": lines[:5]})
+    lines = [
+        x.strip("•- 0123456789.、)） \t")
+        for x in text.splitlines()
+        if x.strip()
+    ]
+    questions = [x for x in lines if x][:5]
+    if len(questions) < 5:
+        questions.extend(DEFAULT_STARTER_QUESTIONS[len(questions):])
+    return JSONResponse({"questions": questions[:5]})
 
 
 @router.post("/api/tavern/start")
@@ -212,11 +236,10 @@ async def get_engine_status(
     session_key: str = Query(default="default"),
 ) -> JSONResponse:
     """查询当前用户的 AI 引擎状态"""
-    pref = _engine_prefs.get(session_key, "qwen" if QwenConfig.API_KEY else "secondme")
-    # NOTE: 如果用户偏好 qwen 但 API key 不可用，实际引擎应为 secondme
-    actual = pref if (pref == "secondme" or QwenConfig.API_KEY) else "secondme"
+    pref = _engine_prefs.get(session_key, _default_engine())
     return JSONResponse({
-        "current": actual,
+        "current": pref,
+        "secondme_available": bool(SecondMeConfig.CLIENT_ID and SecondMeConfig.CLIENT_SECRET),
         "qwen_available": bool(QwenConfig.API_KEY),
         "qwen_model": QwenConfig.MODEL if QwenConfig.API_KEY else None,
     })
@@ -240,6 +263,14 @@ async def switch_engine(
             _orchestrators[session_key].qwen = _create_qwen_for_user()
         logger.info("用户切换到 Qwen 引擎: session_key=%s", session_key)
     elif target == "secondme":
+        access_token = await get_access_token(session_key)
+        if not access_token:
+            access_token = await _secondme.get_app_access_token()
+        if not access_token:
+            return JSONResponse(
+                {"error": "SecondMe app token 不可用，请检查后端配置"},
+                status_code=400,
+            )
         _engine_prefs[session_key] = "secondme"
         if session_key in _orchestrators:
             _orchestrators[session_key].qwen = None

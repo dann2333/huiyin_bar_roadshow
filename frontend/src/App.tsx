@@ -9,6 +9,7 @@ import './index.css';
 // NOTE: 开发时指向后端 dev server，生产时同源请求（前后端整合部署）
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 const MOBILE_BREAKPOINT = 640;
+const ROADSHOW_SESSION_KEY = 'roadshow';
 
 /** 热度榜条目类型 */
 interface HotItem {
@@ -156,11 +157,23 @@ function renderMarkdown(text: string): string {
  * 避免页面刷新后丢失
  */
 function getStoredSessionKey(): string {
-  return localStorage.getItem('tavern_session_key') || '';
+  return localStorage.getItem('tavern_session_key') || ROADSHOW_SESSION_KEY;
 }
 
 function storeSessionKey(key: string): void {
   localStorage.setItem('tavern_session_key', key);
+}
+
+async function waitForPrintAssets(): Promise<void> {
+  const images = Array.from(document.querySelectorAll<HTMLImageElement>('.print-sheet img'));
+  await Promise.all(images.map(img => {
+    if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+    return new Promise<void>(resolve => {
+      const done = () => resolve();
+      img.addEventListener('load', done, { once: true });
+      img.addEventListener('error', done, { once: true });
+    });
+  }));
 }
 
 /**
@@ -177,11 +190,9 @@ function App() {
   });
   const [input, setInput] = useState('');
   const [started, setStarted] = useState(false);
-  const [authStatus, setAuthStatus] = useState<'checking' | 'success' | 'none'>('checking');
+  const [authStatus, setAuthStatus] = useState<'checking' | 'success' | 'none'>('success');
   // NOTE: 首次登录耳机提示页
-  const [welcomeDismissed, setWelcomeDismissed] = useState(() => {
-    return localStorage.getItem('tavern_welcome_done') === 'true';
-  });
+  const [welcomeDismissed, setWelcomeDismissed] = useState(true);
   // NOTE: 箴言分享相关状态
   const [receiptText, setReceiptText] = useState('');
   const [userConcern, setUserConcern] = useState('');
@@ -281,7 +292,7 @@ function App() {
 
   // 路演模式：免登录，直接进入
   useEffect(() => {
-    const roadshowSession = getStoredSessionKey() || 'roadshow';
+    const roadshowSession = getStoredSessionKey();
     sessionKeyRef.current = roadshowSession;
     storeSessionKey(roadshowSession);
     setAuthStatus('success');
@@ -289,14 +300,14 @@ function App() {
 
   // 初始化：查询当前 AI 引擎
   useEffect(() => {
-    fetch(`${API_BASE}/api/tavern/engine`)
+    fetch(`${API_BASE}/api/tavern/engine?session_key=${encodeURIComponent(sessionKeyRef.current)}`)
       .then(r => r.json())
-      .then(data => setEngine(data.current || 'secondme'))
-      .catch(() => setEngine('secondme'));
+      .then(data => setEngine(data.current || 'qwen'))
+      .catch(() => setEngine('qwen'));
   }, []);
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/tavern/starter-questions?session_key=${sessionKeyRef.current}`)
+    fetch(`${API_BASE}/api/tavern/starter-questions?session_key=${encodeURIComponent(sessionKeyRef.current)}`)
       .then(r => r.json())
       .then(data => setStarterQuestions(Array.isArray(data.questions) ? data.questions : []))
       .catch(() => setStarterQuestions([]));
@@ -329,7 +340,12 @@ function App() {
   useEffect(() => {
     if (receiptText && !printTriggeredRef.current) {
       printTriggeredRef.current = true;
-      setTimeout(() => window.print(), 600);
+      const timer = window.setTimeout(() => {
+        waitForPrintAssets().finally(() => {
+          window.setTimeout(() => window.print(), 150);
+        });
+      }, 300);
+      return () => window.clearTimeout(timer);
     }
   }, [receiptText]);
 
@@ -540,6 +556,7 @@ function App() {
       const data = await resp.json();
       const receipt = data.receipt || '';
       // NOTE: 保存箴言原文和用户困惑，供后续分享使用
+      printTriggeredRef.current = false;
       setReceiptText(receipt);
       if (data.concern) setUserConcern(data.concern);
       if (data.guest_name) setGuestName(data.guest_name);
@@ -784,25 +801,6 @@ function App() {
             title={t('newSessionTip')}
           >
             {t('newSessionBtn')}
-          </button>
-          <button
-            className="logout-btn"
-            onClick={async () => {
-              try {
-                await fetch(`${API_BASE}/api/auth/logout`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ session_key: sessionKeyRef.current }),
-                });
-              } catch { /* 静默失败 */ }
-              localStorage.removeItem('tavern_session_key');
-              localStorage.removeItem('tavern_token');
-              localStorage.removeItem('tavern_welcome_done');
-              window.location.reload();
-            }}
-            title={t('logoutTip')}
-          >
-            {t('logoutBtn')}
           </button>
         </div>
       )}
@@ -1078,7 +1076,7 @@ function App() {
                 // NOTE: 切换到定制模型前，先检查是否已配置 API
                 if (target === 'qwen') {
                   try {
-                    const check = await fetch(`${API_BASE}/api/tavern/engine`);
+                    const check = await fetch(`${API_BASE}/api/tavern/engine?session_key=${encodeURIComponent(sessionKeyRef.current)}`);
                     const info = await check.json();
                     if (!info.qwen_available) {
                       alert(t('customModelNotConfigured'));
@@ -1088,12 +1086,16 @@ function App() {
                 }
                 setEngineSwitching(true);
                 try {
-                  const resp = await fetch(`${API_BASE}/api/tavern/engine`, {
+                  const resp = await fetch(`${API_BASE}/api/tavern/engine?session_key=${encodeURIComponent(sessionKeyRef.current)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ engine: target }),
                   });
                   const data = await resp.json();
+                  if (!resp.ok) {
+                    alert(data.error || t('customModelNotConfigured'));
+                    return;
+                  }
                   if (data.current) setEngine(data.current);
                 } catch (err) {
                   console.error('切换引擎失败:', err);
@@ -1210,7 +1212,7 @@ function App() {
                 <>
                   <button className="action-btn butterfly" onClick={() => { setButterflyInput(''); setButterflyOpen(true); }}>{t('butterfly')}</button>
                   <button className="action-btn" onClick={handleReceipt}>{t('receipt')}</button>
-                  {receiptText && <button className="action-btn" onClick={() => window.print()}>🖨️ 打印简言/谏言</button>}
+                  {receiptText && <button className="action-btn" onClick={() => window.print()}>🖨️ 打印谏言卡</button>}
                   {receiptText && (
                     <button
                       className={`action-btn share-zhihu ${shareStatus}`}
@@ -1284,11 +1286,41 @@ function App() {
 
       {/* 玩法指南弹窗 */}
       {receiptText && (
-        <section className="print-sheet">
-          <img src="/favicon.svg" alt="logo" style={{ width: 84 }} />
-          <h2>简言 · 谏言</h2>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{receiptText}</div>
-          <img src="/icons.svg" alt="logo" style={{ width: 120, marginTop: 16 }} />
+        <section className="print-sheet" aria-label="简言谏言打印页">
+          <article className="print-page">
+            <header className="print-header">
+              <img
+                className="print-logo print-logo-color"
+                src="/logos/zhihu-logo-color.png"
+                alt="知乎"
+              />
+              <div className="print-header-copy">
+                <div className="print-eyebrow">Roadshow Card</div>
+                <h2>简言 · 谏言</h2>
+              </div>
+            </header>
+
+            {userConcern && (
+              <section className="print-concern">
+                <div className="print-section-label">今夜提问</div>
+                <p>{userConcern}</p>
+              </section>
+            )}
+
+            <section className="print-advice">
+              <div className="print-section-label">给你的带走卡</div>
+              <div className="print-receipt-text">{receiptText}</div>
+            </section>
+
+            <footer className="print-footer">
+              <span>回音酒馆 · 刘看山</span>
+              <img
+                className="print-logo print-logo-black"
+                src="/logos/zhihu-logo-black.png"
+                alt="知乎"
+              />
+            </footer>
+          </article>
         </section>
       )}
       {guideOpen && (

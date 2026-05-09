@@ -16,7 +16,7 @@ from app.prompt.bartender import (
     BARTENDER_ANALYSIS_CONTROL,
     BARTENDER_INVITE_PROMPT,
 )
-from app.schema.models import TavernSession, TavernEvent, GuestProfile
+from app.schema.models import TavernSession, TavernEvent, GuestProfile, ChatChunk
 from app.service.guest_builder import GuestBuilder
 from app.utils.safe_json import load_json, save_json, update_json
 
@@ -80,6 +80,60 @@ class TavernOrchestrator:
         """获取酒局会话"""
         return _load_sessions().get(session_id)
 
+    async def _chat_stream(
+        self,
+        message: str,
+        system_prompt: str = "",
+        history: list[dict] | None = None,
+        secondme_session_id: str | None = None,
+    ) -> AsyncIterator[ChatChunk]:
+        """
+        统一 AI 流式入口。
+        路演模式按后端传入的引擎使用 SecondMe 或 OpenAI 兼容 LLM。
+        """
+        if self.qwen:
+            async for chunk in self.qwen.chat_stream(
+                message=message,
+                system_prompt=system_prompt,
+                history=history,
+            ):
+                yield chunk
+            return
+
+        if not self.access_token:
+            logger.warning("未配置 LLM 且没有 SecondMe token，无法生成 AI 回复")
+            yield ChatChunk(done=True)
+            return
+
+        async for chunk in self.secondme.chat_stream(
+            access_token=self.access_token,
+            message=message,
+            system_prompt=system_prompt,
+            session_id=secondme_session_id,
+        ):
+            yield chunk
+
+    async def _ask_ai(
+        self,
+        role_prompt: str,
+        message: str,
+        history: list[dict] | None = None,
+        speaker_name: str = "",
+    ) -> str:
+        """非流式聚合 AI 回复，供开场问题和结构化分析使用。"""
+        text = ""
+        async for chunk in self._chat_stream(
+            message=message,
+            system_prompt=role_prompt,
+            history=history,
+        ):
+            if chunk.done:
+                break
+            text += chunk.content
+        if not text and speaker_name:
+            logger.warning("%s 未返回内容", speaker_name)
+        return text.strip()
+
     async def start_session(self, user_concern: str) -> AsyncIterator[TavernEvent]:
         """
         启动一场酒局（第一幕 + 第二幕）
@@ -105,14 +159,14 @@ class TavernOrchestrator:
 
         # 酒保开场白
         bartender_reply = ""
-        async for chunk in self.secondme.chat_stream(
-            access_token=self.access_token,
+        async for chunk in self._chat_stream(
             message=f"一个深夜的客人推门进来，坐到吧台前，看起来心事重重。",
             system_prompt=BARTENDER_SYSTEM_PROMPT,
         ):
             if chunk.done:
                 # 记录酒保的 session_id
-                session.secondme_session_ids["bartender"] = chunk.session_id
+                if chunk.session_id:
+                    session.secondme_session_ids["bartender"] = chunk.session_id
                 break
             bartender_reply += chunk.content
             yield TavernEvent(
@@ -124,14 +178,14 @@ class TavernOrchestrator:
 
         # 用户倾诉后，酒保回应
         bartender_response = ""
-        async for chunk in self.secondme.chat_stream(
-            access_token=self.access_token,
+        async for chunk in self._chat_stream(
             message=user_concern,
             system_prompt=BARTENDER_SYSTEM_PROMPT,
-            session_id=session.secondme_session_ids.get("bartender"),
+            secondme_session_id=session.secondme_session_ids.get("bartender"),
         ):
             if chunk.done:
-                session.secondme_session_ids["bartender"] = chunk.session_id
+                if chunk.session_id:
+                    session.secondme_session_ids["bartender"] = chunk.session_id
                 break
             bartender_response += chunk.content
             yield TavernEvent(
@@ -142,11 +196,20 @@ class TavernOrchestrator:
         yield TavernEvent(type="bartender", speaker="刘看山", done=True)
 
         # 分析用户意图提取关键词
-        analysis_raw = await self.secondme.act_stream(
-            access_token=self.access_token,
-            message=user_concern,
-            action_control=BARTENDER_ANALYSIS_CONTROL,
-        )
+        if self.qwen:
+            analysis_raw = await self._ask_ai(
+                role_prompt=BARTENDER_ANALYSIS_CONTROL,
+                message=user_concern,
+                speaker_name="用户困境分析",
+            )
+        elif self.access_token:
+            analysis_raw = await self.secondme.act_stream(
+                access_token=self.access_token,
+                message=user_concern,
+                action_control=BARTENDER_ANALYSIS_CONTROL,
+            )
+        else:
+            analysis_raw = ""
         keywords = ["人生选择"]  # 默认关键词
         try:
             # NOTE: LLM 经常返回 ```json 包裹的 JSON，需要先剥离
@@ -260,13 +323,13 @@ class TavernOrchestrator:
         )
 
         alt_reply = ""
-        async for chunk in self.secondme.chat_stream(
-            access_token=self.access_token,
+        async for chunk in self._chat_stream(
             message=intro_message,
             system_prompt=session.guest_alt.system_prompt,
         ):
             if chunk.done:
-                session.secondme_session_ids["guest_alt"] = chunk.session_id
+                if chunk.session_id:
+                    session.secondme_session_ids["guest_alt"] = chunk.session_id
                 break
             alt_reply += chunk.content
             yield TavernEvent(
@@ -409,34 +472,29 @@ class TavernOrchestrator:
         today = datetime.now().strftime("%Y.%m.%d")
         receipt_prompt = (
             f"你是酒馆的酒保刘看山。今晚的酒局已经散场。\n"
-            f"请严格按照以下模板格式，总结今晚的对话精华。\n\n"
+            f"请生成一张适合 86mm x 102mm 彩色相纸打印的「简言 · 谏言」小卡，给路演现场的路人带走。\n\n"
             f"⚠️ 重要规则：\n"
             f"1. 不要使用任何真实用户名！说话者一律用：酒馆来客（当年）、酒馆来客（如今）、酒馆来客（平行宇宙）、客人（提问者）\n"
-            f"2. 必须严格遵循下面的模板格式，不要添加多余的装饰符号\n"
-            f"3. 金句提取 3-5 句最打动人的话\n\n"
+            f"2. 必须严格遵循下面的模板格式，不要添加多余装饰符号\n"
+            f"3. 整体控制在 130 个中文字符以内，适合 86mm x 102mm 的小卡片\n"
+            f"4. 语气温暖克制，不要鸡汤化，不要说教\n\n"
             f"===== 输出模板（请严格遵循） =====\n\n"
-            f"🍺 酒馆箴言 🍺\n\n"
-            f"【今夜主题】\n"
-            f"（一句话概括今晚的主题）\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📝 今夜金句\n\n"
-            f"酒馆来客（当年）说：\n"
-            f"\"（引用原话）\"\n\n"
-            f"酒馆来客（如今）说：\n"
-            f"\"（引用原话）\"\n\n"
-            f"（重复 3-5 条金句）\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"【酒保寄语】\n"
-            f"（用刘看山温暖的口吻写 2-3 句收尾寄语）\n\n"
-            f"—— 刘看山 敬上\n\n"
-            f"🌙 {today}\n\n"
+            f"简言\n"
+            f"（用 1-2 句概括今晚真正的问题和关键看见）\n\n"
+            f"谏言\n"
+            f"1. （一句具体提醒，16 字以内）\n"
+            f"2. （一句具体提醒，16 字以内）\n"
+            f"3. （一句具体提醒，16 字以内）\n\n"
+            f"带走一句\n"
+            f"（从对话中提炼一句短句，16 字以内）\n\n"
+            f"—— 刘看山\n"
+            f"{today}\n\n"
             f"===== 模板结束 =====\n\n"
             f"今晚的对话：\n{context}"
         )
 
         receipt_text = ""
-        async for chunk in self.secondme.chat_stream(
-            access_token=self.access_token,
+        async for chunk in self._chat_stream(
             message=receipt_prompt,
             system_prompt="你是一个善于捕捉人生金句的酒馆记录员。",
         ):
