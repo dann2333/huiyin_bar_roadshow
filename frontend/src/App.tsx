@@ -152,6 +152,48 @@ function renderMarkdown(text: string): string {
     .replace(/<\/tr>(<br\/>)+<\/table>/g, '</tr></table>');
 }
 
+function stripMarkdownForPrint(text: string): string {
+  const cleaned = text
+    .replace(/\r\n/g, '\n')
+    .replace(/```[a-zA-Z0-9_-]*\n?/g, '')
+    .replace(/```/g, '')
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/^\s{0,3}#{1,6}\s*/gm, '')
+    .replace(/^\s{0,3}>\s?/gm, '')
+    .replace(/^\s{0,3}[-*+]\s+/gm, '')
+    .replace(/^\s{0,3}\d+[.)]\s+/gm, '')
+    .replace(/^\s*[-*_]{3,}\s*$/gm, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/~~(.*?)~~/g, '$1')
+    .replace(/[\\`*_~#>|\[\]]/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return cleaned
+    .split('\n')
+    .map(line => line
+      .replace(
+        /^\s*[“"「『']?\s*(?:酒馆来客|客人|提问者|刘看山|酒保)(?:[（(][^）)]{1,10}[）)])?\s*(?:轻声|低声|缓缓|认真|平静|温柔|微笑着|想了想|沉默片刻|顿了顿)?\s*(?:说|说道|开口|提醒|总结|写下|回应|补充|告诉你)?\s*[：:，,、-]\s*/,
+        '',
+      )
+      .replace(/^[“"「『'‘]+|[”"」』'’]+$/g, '')
+      .trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function getPrintQuoteClass(text: string): string {
+  const length = Array.from(text.replace(/\s/g, '')).length;
+  if (length > 110) return 'print-publish-quote print-publish-quote-xs';
+  if (length > 80) return 'print-publish-quote print-publish-quote-sm';
+  if (length > 52) return 'print-publish-quote print-publish-quote-md';
+  return 'print-publish-quote';
+}
+
 /**
  * 使用 localStorage 持久化 session key
  * 避免页面刷新后丢失
@@ -628,6 +670,10 @@ function App() {
       handleSubmit();
     }
   };
+
+  const printReceiptText = stripMarkdownForPrint(receiptText);
+  const printConcernText = stripMarkdownForPrint(userConcern);
+  const printQuoteClass = getPrintQuoteClass(printReceiptText);
 
   if (authStatus === 'checking') {
     return (
@@ -1288,38 +1334,42 @@ function App() {
       {receiptText && (
         <section className="print-sheet" aria-label="简言谏言打印页">
           <article className="print-page">
-            <header className="print-header">
-              <img
-                className="print-logo print-logo-color"
-                src="/logos/zhihu-logo-color.png"
-                alt="知乎"
-              />
-              <div className="print-header-copy">
-                <div className="print-eyebrow">Roadshow Card</div>
-                <h2>简言 · 谏言</h2>
-              </div>
-            </header>
-
-            {userConcern && (
-              <section className="print-concern">
-                <div className="print-section-label">今夜提问</div>
-                <p>{userConcern}</p>
-              </section>
-            )}
-
-            <section className="print-advice">
-              <div className="print-section-label">给你的带走卡</div>
-              <div className="print-receipt-text">{receiptText}</div>
+            <section className="print-publish-main">
+              <div className="print-quote-mark" aria-hidden="true">“</div>
+              <div className={printQuoteClass}>{printReceiptText}</div>
             </section>
 
-            <footer className="print-footer">
-              <span>回音酒馆 · 刘看山</span>
+            <section className="print-publish-cta">
+              <div className="print-notch" aria-hidden="true" />
+              <div className="print-cta-copy">
+                <p className="print-cta-question">
+                  {printConcernText || '你这一辈子，悟出一个最大的道理是什么？'}
+                </p>
+                <div className="print-logo-strip" aria-label="合作标识">
+                  <img
+                    className="print-logo-mini print-logo-mini-wide"
+                    src="/logos/agi-bar-logo-wide.png"
+                    alt="AGI Bar 知识酒馆"
+                  />
+                  <img
+                    className="print-logo-mini print-logo-mini-zhihu"
+                    src="/logos/zhihu-logo-color.png"
+                    alt="知乎"
+                  />
+                </div>
+                <img
+                  className="print-logo-foam-bottom"
+                  src="/logos/foam-bar-wordmark.svg"
+                  alt="泡沫最大的酒吧"
+                />
+              </div>
+
               <img
-                className="print-logo print-logo-black"
-                src="/logos/zhihu-logo-black.png"
-                alt="知乎"
+                className="print-qr"
+                src="/logos/roadshow-qr.jpg"
+                alt="二维码"
               />
-            </footer>
+            </section>
           </article>
         </section>
       )}
