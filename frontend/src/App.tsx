@@ -1347,9 +1347,9 @@ function App() {
                 </p>
                 <div className="print-logo-strip" aria-label="合作标识">
                   <img
-                    className="print-logo-mini print-logo-mini-wide"
-                    src="/logos/agi-bar-logo-wide.png"
-                    alt="AGI Bar 知识酒馆"
+                    className="print-logo-mini print-logo-mini-brand"
+                    src="/logos/roadshow-brand-logo.jpg"
+                    alt="回音酒馆"
                   />
                   <img
                     className="print-logo-mini print-logo-mini-zhihu"
@@ -1357,11 +1357,6 @@ function App() {
                     alt="知乎"
                   />
                 </div>
-                <img
-                  className="print-logo-foam-bottom"
-                  src="/logos/foam-bar-wordmark.svg"
-                  alt="泡沫最大的酒吧"
-                />
               </div>
 
               <img

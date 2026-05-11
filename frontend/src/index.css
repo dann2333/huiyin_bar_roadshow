@@ -1953,7 +1953,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    gap: 2mm;
+    gap: 2.3mm;
   }
 
   .print-logo-mini {
@@ -1961,24 +1961,15 @@ body {
     object-fit: contain;
   }
 
-  .print-logo-mini-wide {
-    width: 14.5mm;
-    height: 4.8mm;
-    border-radius: 1mm;
+  .print-logo-mini-brand {
+    width: 20mm;
+    height: 9.8mm;
+    border-radius: 0.8mm;
   }
 
   .print-logo-mini-zhihu {
     width: 10.5mm;
     height: auto;
-  }
-
-  .print-logo-foam-bottom {
-    display: block;
-    width: 27mm;
-    height: 4.7mm;
-    margin-top: 1.1mm;
-    object-fit: contain;
-    object-position: left center;
   }
 
   .print-qr {
