@@ -168,7 +168,7 @@ function stripMarkdownForPrint(text: string): string {
     .replace(/(\*\*|__)(.*?)\1/g, '$2')
     .replace(/(\*|_)(.*?)\1/g, '$2')
     .replace(/~~(.*?)~~/g, '$1')
-    .replace(/[\\`*_~#>|\[\]]/g, '')
+    .replace(/[\\`*_~#>|[\]]/g, '')
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
@@ -192,6 +192,268 @@ function getPrintQuoteClass(text: string): string {
   if (length > 80) return 'print-publish-quote print-publish-quote-sm';
   if (length > 52) return 'print-publish-quote print-publish-quote-md';
   return 'print-publish-quote';
+}
+
+interface PrintCardImageData {
+  quote: string;
+  concern: string;
+}
+
+interface PrintQuoteMetrics {
+  fontPt: number;
+  lineHeight: number;
+  maxLines: number;
+}
+
+const PRINT_CARD_EXPORT_SIZE = 900;
+const PRINT_CARD_MM = 76.2;
+const PRINT_CARD_PT = 216;
+const PRINT_CARD_BLUE = '#4553a0';
+const PRINT_FONT_STACK = '"Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif';
+const PRINT_BRAND_LOGO = '/logos/roadshow-brand-logo.jpg';
+const PRINT_ZHIHU_LOGO = '/logos/zhihu-logo-color.png';
+const PRINT_QR = '/logos/roadshow-qr.jpg';
+
+function getPrintQuoteMetrics(text: string): PrintQuoteMetrics {
+  const length = Array.from(text.replace(/\s/g, '')).length;
+  if (length > 110) return { fontPt: 8, lineHeight: 1.26, maxLines: 7 };
+  if (length > 80) return { fontPt: 9.5, lineHeight: 1.34, maxLines: 6 };
+  if (length > 52) return { fontPt: 11.2, lineHeight: 1.42, maxLines: 5 };
+  return { fontPt: 12.8, lineHeight: 1.48, maxLines: 5 };
+}
+
+function loadCanvasImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => resolve(null);
+    image.src = src;
+  });
+}
+
+function fitLineWithEllipsis(
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  maxWidth: number,
+): string {
+  const ellipsis = '...';
+  const chars = Array.from(line);
+  while (chars.length > 0 && ctx.measureText(`${chars.join('')}${ellipsis}`).width > maxWidth) {
+    chars.pop();
+  }
+  return `${chars.join('')}${ellipsis}`;
+}
+
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const lines: string[] = [];
+  const paragraphs = text.split('\n');
+
+  for (const paragraph of paragraphs) {
+    let line = '';
+    const chars = Array.from(paragraph);
+
+    if (chars.length === 0) {
+      lines.push('');
+      continue;
+    }
+
+    for (const char of chars) {
+      const nextLine = `${line}${char}`;
+      if (line && ctx.measureText(nextLine).width > maxWidth) {
+        lines.push(line);
+        line = char;
+      } else {
+        line = nextLine;
+      }
+    }
+
+    if (line) {
+      lines.push(line);
+    }
+  }
+
+  if (lines.length <= maxLines) return lines;
+
+  const clamped = lines.slice(0, maxLines);
+  clamped[clamped.length - 1] = fitLineWithEllipsis(ctx, clamped[clamped.length - 1], maxWidth);
+  return clamped;
+}
+
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function drawImageContain(
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement | null,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius = 0,
+): void {
+  if (!image || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+
+  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+  const drawWidth = image.naturalWidth * scale;
+  const drawHeight = image.naturalHeight * scale;
+  const drawX = x + (width - drawWidth) / 2;
+  const drawY = y + (height - drawHeight) / 2;
+
+  ctx.save();
+  if (radius > 0) {
+    drawRoundedRect(ctx, x, y, width, height, radius);
+    ctx.clip();
+  }
+  ctx.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  ctx.restore();
+}
+
+async function downloadPrintCardImage({ quote, concern }: PrintCardImageData): Promise<void> {
+  if ('fonts' in document) {
+    await document.fonts.ready.catch(() => undefined);
+  }
+
+  const [brandLogo, zhihuLogo, qrCode] = await Promise.all([
+    loadCanvasImage(PRINT_BRAND_LOGO),
+    loadCanvasImage(PRINT_ZHIHU_LOGO),
+    loadCanvasImage(PRINT_QR),
+  ]);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = PRINT_CARD_EXPORT_SIZE;
+  canvas.height = PRINT_CARD_EXPORT_SIZE;
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas is not supported');
+
+  const mm = (value: number) => value * (PRINT_CARD_EXPORT_SIZE / PRINT_CARD_MM);
+  const pt = (value: number) => value * (PRINT_CARD_EXPORT_SIZE / PRINT_CARD_PT);
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.save();
+  drawRoundedRect(ctx, 0, 0, canvas.width, canvas.height, mm(3));
+  ctx.clip();
+
+  const mainHeight = mm(48);
+  ctx.fillStyle = PRINT_CARD_BLUE;
+  ctx.fillRect(0, 0, canvas.width, mainHeight);
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+  ctx.font = `700 ${mm(16)}px Georgia, serif`;
+  ctx.textBaseline = 'top';
+  ctx.fillText('“', mm(3.2), mm(2.2));
+
+  const quoteMetrics = getPrintQuoteMetrics(quote);
+  const quoteFontPx = pt(quoteMetrics.fontPt);
+  const quoteLineHeightPx = quoteFontPx * quoteMetrics.lineHeight;
+  const quoteMaxWidth = canvas.width - mm(6.2) * 2;
+  const quoteContentTop = mm(6.3);
+  const quoteContentHeight = mainHeight - mm(6.3) - mm(4.4);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = `800 ${quoteFontPx}px ${PRINT_FONT_STACK}`;
+  const quoteLines = wrapCanvasText(ctx, quote, quoteMaxWidth, quoteMetrics.maxLines);
+  const quoteBlockHeight = quoteLines.length * quoteLineHeightPx;
+  const quoteY = quoteContentTop + Math.max(0, (quoteContentHeight - quoteBlockHeight) / 2);
+  quoteLines.forEach((line, index) => {
+    ctx.fillText(line, mm(6.2), quoteY + index * quoteLineHeightPx);
+  });
+
+  const ctaTop = mainHeight;
+  const ctaHeight = canvas.height - mainHeight;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, ctaTop, canvas.width, ctaHeight);
+
+  ctx.fillStyle = PRINT_CARD_BLUE;
+  ctx.beginPath();
+  ctx.moveTo(mm(13.5), ctaTop);
+  ctx.lineTo(mm(13.5 + 3.7), ctaTop + mm(5.7));
+  ctx.lineTo(mm(13.5 + 7.4), ctaTop);
+  ctx.closePath();
+  ctx.fill();
+
+  const ctaPaddingX = mm(5.8);
+  const ctaGap = mm(3.2);
+  const qrSize = mm(17.5);
+  const qrX = canvas.width - ctaPaddingX - qrSize;
+  const qrY = ctaTop + (ctaHeight - qrSize) / 2;
+  drawImageContain(ctx, qrCode, qrX, qrY, qrSize, qrSize);
+
+  const copyX = ctaPaddingX;
+  const copyWidth = qrX - ctaGap - copyX;
+  const logoBrandWidth = mm(20);
+  const logoBrandHeight = mm(9.8);
+  const logoZhihuWidth = mm(10.5);
+  const logoGap = mm(2.3);
+  const questionFontPx = pt(6.8);
+  const questionLineHeightPx = questionFontPx * 1.2;
+  const copyBlockHeight = questionLineHeightPx + mm(2.2) + logoBrandHeight;
+  const copyY = ctaTop + mm(3.7) + Math.max(0, (ctaHeight - mm(3.7) - mm(3.4) - copyBlockHeight) / 2);
+
+  ctx.fillStyle = '#111';
+  ctx.font = `800 ${questionFontPx}px ${PRINT_FONT_STACK}`;
+  const question = concern || '你这一辈子，悟出一个最大的道理是什么？';
+  const questionLine = wrapCanvasText(ctx, question, copyWidth, 1)[0] || '';
+  ctx.fillText(questionLine, copyX, copyY);
+
+  const logoY = copyY + questionLineHeightPx + mm(2.2);
+  drawImageContain(ctx, brandLogo, copyX, logoY, logoBrandWidth, logoBrandHeight, mm(0.8));
+  drawImageContain(
+    ctx,
+    zhihuLogo,
+    copyX + logoBrandWidth + logoGap,
+    logoY,
+    logoZhihuWidth,
+    logoBrandHeight,
+  );
+
+  ctx.restore();
+
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(result => {
+      if (result) {
+        resolve(result);
+      } else {
+        reject(new Error('Failed to create image'));
+      }
+    }, 'image/png');
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  link.href = url;
+  link.download = `huiyin-advice-card-${timestamp}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /**
@@ -241,11 +503,12 @@ function App() {
   const [shareStatus, setShareStatus] = useState<'idle' | 'sharing' | 'success' | 'error' | 'cooldown'>('idle');
   const [shareUrl, setShareUrl] = useState('');
   const [guestName, setGuestName] = useState('');
+  const [printChoiceOpen, setPrintChoiceOpen] = useState(false);
+  const [imageSaving, setImageSaving] = useState(false);
   // NOTE: AI 引擎状态
   const [engine, setEngine] = useState<'qwen' | 'secondme'>('secondme');
   const [engineSwitching, setEngineSwitching] = useState(false);
   const [starterQuestions, setStarterQuestions] = useState<string[]>([]);
-  const printTriggeredRef = useRef(false);
   // NOTE: 产品文档弹窗
   const [docOpen, setDocOpen] = useState(false);
   const [docContent, setDocContent] = useState('');
@@ -378,18 +641,6 @@ function App() {
   useEffect(() => {
     dialogEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.dialogs]);
-
-  useEffect(() => {
-    if (receiptText && !printTriggeredRef.current) {
-      printTriggeredRef.current = true;
-      const timer = window.setTimeout(() => {
-        waitForPrintAssets().finally(() => {
-          window.setTimeout(() => window.print(), 150);
-        });
-      }, 300);
-      return () => window.clearTimeout(timer);
-    }
-  }, [receiptText]);
 
   /** 处理 SSE 事件 → 追加到对话流 */
   const handleEvent = useCallback((event: TavernEvent) => {
@@ -598,10 +849,10 @@ function App() {
       const data = await resp.json();
       const receipt = data.receipt || '';
       // NOTE: 保存箴言原文和用户困惑，供后续分享使用
-      printTriggeredRef.current = false;
       setReceiptText(receipt);
       if (data.concern) setUserConcern(data.concern);
       if (data.guest_name) setGuestName(data.guest_name);
+      setPrintChoiceOpen(true);
       // 重置分享状态
       setShareStatus('idle');
       setShareUrl('');
@@ -674,6 +925,31 @@ function App() {
   const printReceiptText = stripMarkdownForPrint(receiptText);
   const printConcernText = stripMarkdownForPrint(userConcern);
   const printQuoteClass = getPrintQuoteClass(printReceiptText);
+  const openPrintChoice = useCallback(() => {
+    if (receiptText) setPrintChoiceOpen(true);
+  }, [receiptText]);
+  const handlePrintReceipt = useCallback(() => {
+    setPrintChoiceOpen(false);
+    waitForPrintAssets().finally(() => {
+      window.setTimeout(() => window.print(), 150);
+    });
+  }, []);
+  const handleDownloadReceiptImage = useCallback(async () => {
+    if (!receiptText || imageSaving) return;
+    setImageSaving(true);
+    try {
+      await downloadPrintCardImage({
+        quote: stripMarkdownForPrint(receiptText),
+        concern: stripMarkdownForPrint(userConcern),
+      });
+      setPrintChoiceOpen(false);
+    } catch (err) {
+      console.error('保存谏言卡图片失败:', err);
+      alert('保存图片失败，请稍后重试');
+    } finally {
+      setImageSaving(false);
+    }
+  }, [receiptText, userConcern, imageSaving]);
 
   if (authStatus === 'checking') {
     return (
@@ -1258,7 +1534,7 @@ function App() {
                 <>
                   <button className="action-btn butterfly" onClick={() => { setButterflyInput(''); setButterflyOpen(true); }}>{t('butterfly')}</button>
                   <button className="action-btn" onClick={handleReceipt}>{t('receipt')}</button>
-                  {receiptText && <button className="action-btn" onClick={() => window.print()}>🖨️ 打印谏言卡</button>}
+                  {receiptText && <button className="action-btn" onClick={openPrintChoice}>🖨️ 保存/打印谏言卡</button>}
                   {receiptText && (
                     <button
                       className={`action-btn share-zhihu ${shareStatus}`}
@@ -1326,6 +1602,44 @@ function App() {
             >
               {started ? t('btnSpeak') : t('btnEnter')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {printChoiceOpen && receiptText && (
+        <div className="doc-overlay" onClick={() => !imageSaving && setPrintChoiceOpen(false)}>
+          <div
+            className="print-choice-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="print-choice-title"
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              className="doc-close"
+              disabled={imageSaving}
+              onClick={() => setPrintChoiceOpen(false)}
+            >
+              ×
+            </button>
+            <h2 id="print-choice-title" className="print-choice-title">谏言卡</h2>
+            <p className="print-choice-desc">选择保存为图片，或继续调用系统打印。</p>
+            <div className="print-choice-actions">
+              <button
+                className="send-btn print-choice-primary"
+                disabled={imageSaving}
+                onClick={handleDownloadReceiptImage}
+              >
+                {imageSaving ? '保存中...' : '保存图片'}
+              </button>
+              <button
+                className="action-btn"
+                disabled={imageSaving}
+                onClick={handlePrintReceipt}
+              >
+                打印
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1363,6 +1363,56 @@ body {
   margin-top: 1.5rem;
 }
 
+/* ===== 谏言卡保存/打印选择弹窗 ===== */
+.print-choice-modal {
+  position: relative;
+  width: min(88vw, 420px);
+  max-height: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 2rem);
+  background: var(--bg-secondary);
+  border: 1px solid rgba(245, 158, 11, 0.16);
+  border-radius: 18px;
+  padding: 2.2rem 2rem 1.8rem;
+  box-shadow:
+    0 32px 80px rgba(0, 0, 0, 0.6),
+    0 0 36px rgba(245, 158, 11, 0.08);
+  animation: slideUp 0.3s ease;
+  text-align: center;
+}
+
+.print-choice-title {
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  color: var(--amber-400);
+  margin-bottom: 0.5rem;
+}
+
+.print-choice-desc {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin-bottom: 1.35rem;
+}
+
+.print-choice-actions {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.print-choice-actions .send-btn,
+.print-choice-actions .action-btn {
+  min-width: 120px;
+}
+
+.print-choice-actions .send-btn:disabled,
+.print-choice-actions .action-btn:disabled,
+.doc-close:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* ===== 背景音乐控制器 ===== */
 .music-control {
   position: fixed;
